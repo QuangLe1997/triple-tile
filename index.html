@@ -48,6 +48,9 @@
   .tool:active{transform:scale(.88);}
   .tool .ic{font-size:22px;line-height:1;} .tool .n{font-size:10px;font-weight:800;color:var(--gold);}
   .tool.off{opacity:.4;}
+  .tool.buy .n{color:#7fe0ff;}   /* shows a coin price instead of a free count */
+  .coinbar{width:46px;text-align:center;font-size:12px;font-weight:800;color:var(--gold);background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:5px 0;backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.5);}
 
   #combo{position:fixed;left:50%;top:26%;transform:translateX(-50%) scale(.5);z-index:12;pointer-events:none;
     font-size:34px;font-weight:900;letter-spacing:1px;opacity:0;
@@ -149,8 +152,11 @@
 <div id="menuWrap">
   <div id="menuToggle">☰</div>
   <div id="tools" class="closed">
+    <div class="coinbar">🪙 <span id="ui-coins">0</span></div>
     <div class="tool" id="undoBtn"><div class="ic">↩️</div><div class="n" id="undoN">3</div></div>
     <div class="tool" id="shuffleBtn"><div class="ic">🔀</div><div class="n" id="shuffleN">3</div></div>
+    <div class="tool buy" id="timeBtn"><div class="ic">⏱️</div><div class="n" id="timeCost">40</div></div>
+    <div class="tool buy" id="slotBtn"><div class="ic">➕</div><div class="n" id="slotCost">60</div></div>
     <div class="tool" id="muteBtn"><div class="ic">🔊</div></div>
     <div class="tool" id="homeBtn"><div class="ic">🏠</div></div>
   </div>
@@ -164,7 +170,7 @@
 <div class="overlay" id="menu">
   <div class="menu-dock">
     <div class="help">Tap the glowing 3D tiles into the tray · line up <b>3 of a kind</b> to clear them.</div>
-    <div class="metaLine" id="metaLine">⭐ <span id="menuStars">0</span> stars</div>
+    <div class="metaLine" id="metaLine">⭐ <span id="menuStars">0</span> · 🪙 <span id="menuCoins">0</span></div>
     <div class="btn btn-play" id="startBtn">PLAY ▶</div>
     <div class="menu-row">
       <div class="btn" id="newGameBtn" style="display:none">NEW GAME ↻</div>
@@ -241,26 +247,31 @@ const S = {
   tiles:[], trayArr:[], score:0, best:0, level:1, undo:3, shuffle:3,
   history:[], started:false, over:false, won:false, muted:false, busy:false,
   phase:'menu', introT:0, usedHelp:false, maxTray:0,
-  timeLimit:60, timeLeft:60, timeWarned:false,
+  timeLimit:60, timeLeft:60, timeWarned:false, bonusSlots:0,
 };
 function loadBest(){ try{ S.best=+localStorage.getItem('tt3d_best')||0; }catch(e){} }
 function saveBest(){ try{ localStorage.setItem('tt3d_best',S.best); }catch(e){} }
 
 // ---------------- meta: progress / stars / collection ----------------
 const ALL_ANIMALS=[...SYM.savanna,...SYM.ocean,...SYM.forest,...SYM.sky];   // 32 to collect
-const META={ savedLevel:1, stars:{}, collected:{}, tutDone:false };
+const META={ savedLevel:1, stars:{}, collected:{}, tutDone:false, coins:0 };
+const COST={ undo:25, shuffle:25, time:40, slot:60 };   // booster prices (coins)
 function loadMeta(){ try{
   META.savedLevel=Math.max(1,+localStorage.getItem('tt3d_level')||1);
   META.stars=JSON.parse(localStorage.getItem('tt3d_stars')||'{}')||{};
   META.collected=JSON.parse(localStorage.getItem('tt3d_coll')||'{}')||{};
   META.tutDone=localStorage.getItem('tt3d_tut')==='1';
+  META.coins=Math.max(0,+localStorage.getItem('tt3d_coins')||0);
 }catch(e){ META.stars={}; META.collected={}; } }
 function saveMeta(){ try{
   localStorage.setItem('tt3d_level',META.savedLevel);
   localStorage.setItem('tt3d_stars',JSON.stringify(META.stars));
   localStorage.setItem('tt3d_coll',JSON.stringify(META.collected));
   localStorage.setItem('tt3d_tut',META.tutDone?'1':'0');
+  localStorage.setItem('tt3d_coins',META.coins);
 }catch(e){} }
+function addCoins(n){ META.coins=Math.max(0,META.coins+n); saveMeta(); refreshHUD(); }
+function spendCoins(n){ if(META.coins<n){ showToast('Not enough coins · '+META.coins+'/'+n+' 🪙'); return false; } META.coins-=n; saveMeta(); refreshHUD(); return true; }
 function totalStars(){ let n=0; for(const k in META.stars) n+=META.stars[k]; return n; }
 function collectedCount(){ let n=0; for(const a of ALL_ANIMALS) if(META.collected[a]) n++; return n; }
 function collectAnimal(sym){ if(META.collected[sym]) return false; META.collected[sym]=1; saveMeta(); return true; }
@@ -437,7 +448,7 @@ function clearTiles(){ for(const t of S.tiles){ tileGroup.remove(t.grp); } S.til
 
 function generate(level){
   applyTheme(themeForLevel(level));   // swap material / palette / icons / background / tray colour for this level's theme
-  clearTiles(); S.history=[]; S.over=false; S.won=false; S.busy=false;
+  clearTiles(); S.history=[]; S.over=false; S.won=false; S.busy=false; S.bonusSlots=0;
   // difficulty ramps every level: more icon types + denser pile + tighter time.
   // layers are capped LOW (max 4) so pile height stays even → the view size is
   // consistent level-to-level (no sudden shrink when a new stack layer appears).
@@ -500,7 +511,7 @@ function computeBounds(){
   if(!isFinite(minX)){ minX=-2.5;maxX=2.5;minZ=-2.5;maxZ=1.5;maxY=0.4; }
   const pileW=maxX-minX;
   // fewer tray slots on phones (less clutter, bigger), more on desktop
-  const a=camera.aspect; SLOTS = a<0.72 ? 5 : (a<1.25 ? 6 : 7);
+  const a=camera.aspect; SLOTS = (a<0.72 ? 5 : (a<1.25 ? 6 : 7)) + (S.bonusSlots||0);   // +bonusSlots from the booster
   // tray spans the full pile width → big slots, big in-slot tiles
   layout.traySpan=Math.max(SLOTS*0.66,Math.min(9.0,pileW));
   layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.9;
@@ -662,20 +673,30 @@ function levelStars(){ let s=3; if(S.usedHelp) s--; if(S.maxTray>=SLOTS-1) s--; 
 function winLevel(){ const timeBonus=Math.round(Math.max(0,S.timeLeft))*3; S.score+=100+S.level*20+timeBonus;   // reward finishing fast
   if(S.score>S.best){ S.best=S.score; saveBest(); }
   const st=levelStars(); S.lastStars=st; if(st>(META.stars[S.level]||0)){ META.stars[S.level]=st; } saveMeta();
+  addCoins(st*15+10);   // reward coins (more for a cleaner clear) → spend on boosters
   refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti();
   setTimeout(()=>showResult(true),600);          // congrats banner...
   setTimeout(()=>{ if(S.won) nextLevel(); },2400); }   // ...then auto-advance to the next level
 function gameOver(){ if(S.over) return; S.over=true; if(S.score>S.best){ S.best=S.score; saveBest(); }
   refreshHUD(); sndOver(); buzz([0,80,40,120]); shake(1.2); setTimeout(()=>showResult(false),450); }
 
-function doUndo(){ if(S.over||S.phase!=='play'||S.undo<=0||S.history.length===0) return;
+function doUndo(){ if(S.over||S.phase!=='play'||S.history.length===0) return;
+  if(S.undo>0) S.undo--; else if(!spendCoins(COST.undo)) return;   // free uses first, then buy with coins
   const id=S.history.pop(); const idx=S.trayArr.findIndex(t=>t.id===id); if(idx<0)return;
-  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.vy=6; S.undo--; S.usedHelp=true; sndPick(); reindexTray(); refreshHUD(); }
-function doShuffle(){ if(S.over||S.phase!=='play'||S.shuffle<=0) return; S.usedHelp=true;
+  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.vy=6; S.usedHelp=true; sndPick(); reindexTray(); refreshHUD(); }
+function doShuffle(){ if(S.over||S.phase!=='play') return;
+  if(S.shuffle>0) S.shuffle--; else if(!spendCoins(COST.shuffle)) return;
+  S.usedHelp=true;
   const live=S.tiles.filter(t=>!t.taken&&!t.gone); const types=shuffleArr(live.map(t=>t.type));
   live.forEach((t,i)=>{ t.type=types[i]; const f=FACES[t.type%FACES.length]; t.grp.userData.mat.color.setHex(f.b);
     t.grp.userData.icon.material.map=iconTexture(t.type); t.grp.userData.icon.material.needsUpdate=true; t.pop=0.7; });
-  S.shuffle--; beep(320,0.12,'triangle',0.16,540); refreshHUD(); }
+  beep(320,0.12,'triangle',0.16,540); refreshHUD(); }
+function buyTime(){ if(!S.started||S.over||S.phase!=='play') return; if(!spendCoins(COST.time)) return;
+  S.timeLeft+=20; if(S.timeLeft>10) S.timeWarned=false; updateTimeHUD(); showToast('+20 seconds ⏱️'); buzz(20); }
+function buySlot(){ if(!S.started||S.over||S.phase!=='play') return;
+  if((S.bonusSlots||0)>=2){ showToast('Max extra slots reached'); return; }
+  if(!spendCoins(COST.slot)) return;
+  S.bonusSlots=(S.bonusSlots||0)+1; computeBounds(); fitContent(); refreshHUD(); showToast('+1 tray slot ➕'); buzz(20); }
 
 // ---------------- physics + particles ----------------
 const GRAVITY=30;                 // units/s^2 — realistic fall acceleration
@@ -732,9 +753,17 @@ function updateTimeHUD(){ const s=Math.max(0,Math.ceil(S.timeLeft)); if(s===_las
   document.querySelector('.chip.time').classList.toggle('low', s<=10 && S.phase==='play'); }
 function refreshHUD(){ document.getElementById('ui-level').textContent=S.level;
   document.getElementById('ui-score').textContent=S.score; document.getElementById('ui-best').textContent=S.best;
-  document.getElementById('undoN').textContent=S.undo; document.getElementById('shuffleN').textContent=S.shuffle;
-  document.getElementById('undoBtn').classList.toggle('off',S.undo<=0||S.history.length===0);
-  document.getElementById('shuffleBtn').classList.toggle('off',S.shuffle<=0);
+  const cEl=document.getElementById('ui-coins'); if(cEl) cEl.textContent=META.coins;
+  // undo / shuffle: show the free count, or the coin price (cyan) once the free uses run out
+  const ub=document.getElementById('undoBtn'), uFree=S.undo>0;
+  document.getElementById('undoN').textContent=uFree?S.undo:COST.undo; ub.classList.toggle('buy',!uFree);
+  ub.classList.toggle('off', S.history.length===0 || (!uFree && META.coins<COST.undo));
+  const sb=document.getElementById('shuffleBtn'), sFree=S.shuffle>0;
+  document.getElementById('shuffleN').textContent=sFree?S.shuffle:COST.shuffle; sb.classList.toggle('buy',!sFree);
+  sb.classList.toggle('off', !sFree && META.coins<COST.shuffle);
+  document.getElementById('timeCost').textContent=COST.time; document.getElementById('slotCost').textContent=COST.slot;
+  document.getElementById('timeBtn').classList.toggle('off', META.coins<COST.time);
+  document.getElementById('slotBtn').classList.toggle('off', META.coins<COST.slot || (S.bonusSlots||0)>=2);
   _lastTimeShown=-1; updateTimeHUD(); }
 let comboT=null;
 function showCombo(txt){ const el=document.getElementById('combo'); el.textContent=txt; el.style.opacity=1; el.style.transform='translateX(-50%) scale(1.15)';
@@ -770,7 +799,8 @@ function refreshMenu(){ const hasSave=META.savedLevel>1; const sb=document.getEl
   if(hasSave){ sb.textContent='CONTINUE · LV '+META.savedLevel+' ▶'; sb.onclick=continueGame; ng.style.display=''; ng.onclick=()=>startGame(1); }
   else { sb.textContent='PLAY ▶'; sb.onclick=()=>startGame(1); ng.style.display='none'; }
   document.getElementById('menuStars').textContent=totalStars();
-  document.getElementById('metaLine').style.display=totalStars()>0?'':'none';
+  document.getElementById('menuCoins').textContent=META.coins;
+  document.getElementById('metaLine').style.display=(totalStars()>0||META.coins>0)?'':'none';
   document.getElementById('collN').textContent=collectedCount(); document.getElementById('collTot').textContent=ALL_ANIMALS.length; }
 function buildCollection(){ const grid=document.getElementById('collGrid'); grid.innerHTML='';
   const groups=[['SAVANNA',SYM.savanna],['CORAL REEF',SYM.ocean],['CRYSTAL ZOO',SYM.forest],['IRON AVIARY',SYM.sky]];
@@ -786,6 +816,8 @@ document.getElementById('collectBtn').addEventListener('click',()=>{ buildCollec
 document.getElementById('collClose').addEventListener('click',()=>hide('collection'));
 document.getElementById('undoBtn').addEventListener('click',doUndo);
 document.getElementById('shuffleBtn').addEventListener('click',doShuffle);
+document.getElementById('timeBtn').addEventListener('click',buyTime);
+document.getElementById('slotBtn').addEventListener('click',buySlot);
 document.getElementById('homeBtn').addEventListener('click',quitToMenu);
 const muteBtn=document.getElementById('muteBtn');
 function drawMute(){ muteBtn.querySelector('.ic').textContent=S.muted?'🔇':'🔊'; }
