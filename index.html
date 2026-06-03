@@ -29,23 +29,21 @@
 
   #hud{position:fixed;left:0;right:0;top:max(10px,env(safe-area-inset-top));z-index:9;
     display:flex;gap:9px;justify-content:center;align-items:center;pointer-events:none;padding:0 12px;}
-  .chip{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:7px 15px;min-width:72px;
-    text-align:center;backdrop-filter:blur(12px);box-shadow:0 10px 26px rgba(0,0,0,.45);}
-  .chip .l{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
-  .chip .v{font-size:20px;font-weight:800;line-height:1.15;}
+  .chip{padding:2px 14px;min-width:58px;text-align:center;}   /* flat — no card */
+  .chip .l{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.7);text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.45);}
+  .chip .v{font-size:22px;font-weight:800;line-height:1.15;text-shadow:0 2px 6px rgba(0,0,0,.5);}
   .chip.score .v{color:var(--mint);} .chip.best .v{color:var(--gold);} .chip.level .v{color:var(--rose);}
 
   #tools{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(16px,calc(env(safe-area-inset-bottom) + 12px));
     z-index:11;display:flex;flex-direction:column;gap:11px;}
-  .tool{width:50px;height:50px;border-radius:16px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:1px;background:var(--panel);border:1px solid var(--line);color:var(--ink);backdrop-filter:blur(12px);
-    box-shadow:0 10px 26px rgba(0,0,0,.45);transition:transform .12s,background .2s;}
-  .tool:active{transform:scale(.9);background:rgba(231,192,106,.2);}
-  .tool .ic{font-size:21px;line-height:1;} .tool .n{font-size:9px;font-weight:800;color:var(--gold);}
-  .tool.off{opacity:.4;}
+  .tool{width:52px;height:52px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:1px;color:var(--ink);transition:transform .12s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
+  .tool:active{transform:scale(.88);}
+  .tool .ic{font-size:30px;line-height:1;} .tool .n{font-size:11px;font-weight:800;color:var(--gold);text-shadow:0 1px 3px rgba(0,0,0,.6);}
+  .tool.off{opacity:.35;}
   #muteBtn{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:11;
-    width:40px;height:40px;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;
-    background:var(--panel);border:1px solid var(--line);color:var(--ink);backdrop-filter:blur(12px);box-shadow:0 10px 26px rgba(0,0,0,.45);}
+    width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;
+    color:var(--ink);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
 
   #combo{position:fixed;left:50%;top:26%;transform:translateX(-50%) scale(.5);z-index:12;pointer-events:none;
     font-size:34px;font-weight:900;letter-spacing:1px;opacity:0;
@@ -61,10 +59,7 @@
     background:linear-gradient(105deg,var(--mint),var(--cream) 50%,var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 4px 26px rgba(0,0,0,.55));}
   .sub{font-size:12px;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-top:-8px;}
-  .panel{position:relative;overflow:hidden;background:var(--panel);border:1px solid var(--line);border-radius:22px;
-    padding:24px 30px;max-width:90vw;box-shadow:0 28px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.07);}
-  .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
-    background:linear-gradient(90deg,transparent,var(--mint) 30%,var(--gold) 70%,transparent);opacity:.9;}
+  .panel{position:relative;background:transparent;border:0;border-radius:0;padding:10px 20px;max-width:90vw;}  /* flat — no card */
   .help{font-size:13px;line-height:1.95;color:var(--muted);} .help b{color:var(--mint);}
   .gostats{display:flex;gap:34px;justify-content:center;margin:4px 0 14px;}
   .gostats .l{font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
@@ -208,13 +203,9 @@ const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) }
 
 // vibrant nebula backdrop (matches the key-art banner: navy + colour glows + sparkles)
 (function(){ const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-  let grd=g.createLinearGradient(0,0,0,s); grd.addColorStop(0,'#5b6bd6'); grd.addColorStop(0.5,'#5566c4'); grd.addColorStop(1,'#3f4aa0');
+  // simple, calm gradient — clean & easy to read the tiles against
+  let grd=g.createLinearGradient(0,0,0,s); grd.addColorStop(0,'#4a5590'); grd.addColorStop(1,'#333c68');
   g.fillStyle=grd; g.fillRect(0,0,s,s);
-  const glow=(x,y,r,col,al)=>{ const rg=g.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,col); rg.addColorStop(1,'rgba(0,0,0,0)'); g.globalAlpha=al; g.fillStyle=rg; g.fillRect(0,0,s,s); g.globalAlpha=1; };
-  glow(s*0.16,s*0.18,s*0.6,'#ff9ec8',0.6); glow(s*0.86,s*0.16,s*0.55,'#7ff0e6',0.55);
-  glow(s*0.5,s*0.95,s*0.65,'#b89bff',0.5); glow(s*0.82,s*0.7,s*0.45,'#ffe08a',0.35);
-  g.fillStyle='#ffffff'; for(let i=0;i<70;i++){ g.globalAlpha=Math.random()*0.5+0.25; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.6+0.3,0,6.28); g.fill(); } g.globalAlpha=1;
-  const vig=g.createRadialGradient(s*0.5,s*0.42,s*0.25,s*0.5,s*0.5,s*0.75); vig.addColorStop(0,'rgba(0,0,0,0)'); vig.addColorStop(1,'rgba(20,18,55,0.5)'); g.fillStyle=vig; g.fillRect(0,0,s,s);
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
 // soft studio environment → clean glossy candy reflections (premium, not glary)
 scene.environment=(function(){ const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const g=cv.getContext('2d');
@@ -287,7 +278,7 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=4; rows0=7; }            // portrait — few BIG tiles, tall enough to fill up to the HUD
+  if(a<0.72){ cols0=3; rows0=7; }            // portrait — BIG tiles (3 wide), tall to fill the frame
   else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
   else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
   else { cols0=9; rows0=3; }                 // ultra-wide
