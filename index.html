@@ -291,25 +291,24 @@ function generate(level){
   else if(a<1.8){ cols0=8; rows0=3; }        // landscape — wide
   else { cols0=10; rows0=3; }                // ultra-wide
   const step=layout.step;
-  const positions=[];
-  for(let L=0;L<layers;L++){
-    const cols=Math.max(2,cols0-L), rows=Math.max(2,rows0-(L>0?L:0));
-    const offX=-(cols-1)*step/2;
-    const offZ=-(rows-1)*step/2;
-    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
-      if(L>0 && Math.random()<0.10) continue;
-      positions.push({ x:offX+c*step + (Math.random()-0.5)*0.04, z:offZ+r*step + 0.3 + (Math.random()-0.5)*0.04, layer:L });
-    }
-  }
-  shuffleArr(positions);
-  let count=positions.length-(positions.length%3);
-  const slots=positions.slice(0,count);
+  const offX=-(cols0-1)*step/2, offZ=-(rows0-1)*step/2;
+  // build a grid of cells, then STACK tiles into columns (each upper tile rests on
+  // the surface of the one below — supported, slightly offset, never interleaved)
+  const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step, z:offZ+r*step+0.3});
+  const positions=[], height=cells.map(()=>0);
+  for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.05, z:cells[i].z+(Math.random()-0.5)*0.05, layer:0}); height[i]=1; }
+  for(let L=1;L<layers;L++){ const dens=0.6-(L-1)*0.1;
+    for(let i=0;i<cells.length;i++){ if(height[i]===L && Math.random()<dens){ height[i]++;
+      positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:L}); } } }
+  // trim to a multiple of 3 by dropping a few TOP tiles (keeps every stack supported)
+  positions.sort((p,q)=>q.layer-p.layer); positions.splice(0, positions.length%3);
+  const count=positions.length, slots=positions;
   const bag=[]; for(let i=0;i<count/3;i++){ const tp=rnd(typeCount); bag.push(tp,tp,tp); } shuffleArr(bag);
   let id=0;
   for(let i=0;i<slots.length;i++){
     const p=slots[i], type=bag[i];
     const grp=makeTileMesh(type);
-    const home=new THREE.Vector3(p.x, -0.06 + p.layer*0.5, p.z);
+    const home=new THREE.Vector3(p.x, -0.06 + p.layer*(TILE*0.72+0.06), p.z);   // sit on the surface below + small seam (no interpenetration)
     grp.position.copy(home); grp.position.y+=6; grp.scale.setScalar(0.01); // drop-in anim
     grp.rotation.y=(Math.random()-0.5)*0.25;
     tileGroup.add(grp);
@@ -323,7 +322,7 @@ function generate(level){
 function isFree(t){
   if(t.taken||t.gone) return false;
   for(const o of S.tiles){ if(o===t||o.taken||o.gone) continue; if(o.layer<=t.layer) continue;
-    if(Math.abs(o.gx-t.gx)<layout.step*0.88 && Math.abs(o.gz-t.gz)<layout.step*0.88) return false; }
+    if(Math.abs(o.gx-t.gx)<layout.step*0.7 && Math.abs(o.gz-t.gz)<layout.step*0.7) return false; }
   return true;
 }
 
@@ -352,7 +351,7 @@ function fitContent(){
   // Viewing pitch by device: phones tilt DOWN more (moderate 3D, less oblique →
   // the grid spreads to fill the tall frame); landscape uses a lower angle.
   let pitchY, fov;
-  if(a<0.72){ pitchY=2.95; fov=44; }       // portrait — near top-down so the grid fills the tall frame
+  if(a<0.72){ pitchY=2.25; fov=46; }       // portrait — tilted enough to SEE the stacking, still fills
   else if(a<1.25){ pitchY=1.8; fov=44; }   // square-ish
   else { pitchY=1.15; fov=40; }            // landscape — cinematic lower angle
   const dir=new THREE.Vector3(0,pitchY,1).normalize();
@@ -418,29 +417,34 @@ function pickTile(t){
   if(S.over || S.phase!=='play') return;
   if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
   if(S.trayArr.length>=7) return;
-  t.taken=true; t.slot=S.trayArr.length; S.trayArr.push(t); t.state='fly'; t.vy=7.2; t.pop=0.5;
+  t.taken=true; t.slot=S.trayArr.length; t.home.copy(trayPos(t.slot)); S.trayArr.push(t); t.state='fly'; t.vy=7.2; t.pop=0.5;
   S.history.push(t.id); sndPick(); buzz(9);
 }
 
-// called when a flying tile actually settles into its tray slot → match resolves HERE
+// called when a flying tile actually settles into its tray slot
 function onTileLanded(t){ checkTray(); }
 function landedCount(){ return S.trayArr.filter(t=>t.state==='tray').length; }
 function checkTray(){
+  if(S.busy) return;
   const landed=S.trayArr.filter(t=>t.state==='tray'); const cnt={};
   for(const t of landed) cnt[t.type]=(cnt[t.type]||0)+1;
   let mt=-1; for(const k in cnt){ if(cnt[k]>=3){ mt=+k; break; } }
-  if(mt>=0){
-    let need=3; const removing=[];
-    S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt && t.state==='tray' && need>0){ need--; removing.push(t); return false; } return true; });
-    for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position,t.type); }
-    S.score+=30; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.3); shake(0.55);
-    reindexTray(); refreshHUD();
-    if(!S.tiles.some(x=>!x.taken&&!x.gone) && S.trayArr.length===0){ S.won=true; winLevel(); }
-    return;
-  }
-  // no triple yet → lose only when all 7 slots are filled AND every tile has landed
+  if(mt>=0){ S.busy=true; setTimeout(()=>{ S.busy=false; clearTriple(); }, 170); return; }  // let the 3rd tile rest fully in the tray first
   if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver();
   refreshHUD();
+}
+function clearTriple(){
+  const landed=S.trayArr.filter(t=>t.state==='tray'); const cnt={};
+  for(const t of landed) cnt[t.type]=(cnt[t.type]||0)+1;
+  let mt=-1; for(const k in cnt){ if(cnt[k]>=3){ mt=+k; break; } }
+  if(mt<0){ if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver(); refreshHUD(); return; }
+  let need=3; const removing=[];
+  S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt && t.state==='tray' && need>0){ need--; removing.push(t); return false; } return true; });
+  for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position,t.type); }
+  S.score+=30; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.3); shake(0.55);
+  reindexTray(); refreshHUD();
+  if(!S.tiles.some(x=>!x.taken&&!x.gone) && S.trayArr.length===0){ S.won=true; winLevel(); return; }
+  setTimeout(()=>checkTray(), 60);   // chain combos after tiles resettle
 }
 // shift remaining tray tiles to slots 0..n-1 (landed ones hop to the new slot)
 function reindexTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i));
