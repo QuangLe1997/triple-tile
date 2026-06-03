@@ -34,16 +34,18 @@
   .chip .v{font-size:22px;font-weight:800;line-height:1.15;text-shadow:0 2px 6px rgba(0,0,0,.5);}
   .chip.score .v{color:var(--mint);} .chip.best .v{color:var(--gold);} .chip.level .v{color:var(--rose);}
 
-  #tools{position:fixed;right:max(10px,env(safe-area-inset-right));top:max(70px,calc(env(safe-area-inset-top) + 66px));
-    z-index:11;display:flex;flex-direction:column;gap:12px;}
-  .tool{width:52px;height:52px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:1px;color:var(--ink);transition:transform .12s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
+  #menuWrap{position:fixed;right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));z-index:12;
+    display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
+  #menuToggle{width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--ink);cursor:pointer;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.5);transition:transform .15s;}
+  #menuToggle:active{transform:scale(.9);}
+  #tools{display:flex;flex-direction:column;gap:10px;transition:opacity .2s ease,transform .2s ease;transform-origin:top right;}
+  #tools.closed{opacity:0;transform:translateY(-8px) scale(.85);pointer-events:none;}
+  .tool{width:46px;height:46px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:var(--ink);
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.5);transition:transform .12s;}
   .tool:active{transform:scale(.88);}
-  .tool .ic{font-size:30px;line-height:1;} .tool .n{font-size:11px;font-weight:800;color:var(--gold);text-shadow:0 1px 3px rgba(0,0,0,.6);}
-  .tool.off{opacity:.35;}
-  #muteBtn{position:fixed;top:max(10px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));z-index:11;
-    width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;
-    color:var(--ink);filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
+  .tool .ic{font-size:22px;line-height:1;} .tool .n{font-size:10px;font-weight:800;color:var(--gold);}
+  .tool.off{opacity:.4;}
 
   #combo{position:fixed;left:50%;top:26%;transform:translateX(-50%) scale(.5);z-index:12;pointer-events:none;
     font-size:34px;font-weight:900;letter-spacing:1px;opacity:0;
@@ -108,10 +110,13 @@
   <div class="chip score"><div class="l">Score</div><div class="v" id="ui-score">0</div></div>
   <div class="chip best"><div class="l">Best</div><div class="v" id="ui-best">0</div></div>
 </div>
-<div id="muteBtn"></div>
-<div id="tools">
-  <div class="tool" id="undoBtn"><div class="ic">↩️</div><div class="n" id="undoN">3</div></div>
-  <div class="tool" id="shuffleBtn"><div class="ic">🔀</div><div class="n" id="shuffleN">3</div></div>
+<div id="menuWrap">
+  <div id="menuToggle">☰</div>
+  <div id="tools" class="closed">
+    <div class="tool" id="undoBtn"><div class="ic">↩️</div><div class="n" id="undoN">3</div></div>
+    <div class="tool" id="shuffleBtn"><div class="ic">🔀</div><div class="n" id="shuffleN">3</div></div>
+    <div class="tool" id="muteBtn"><div class="ic">🔊</div></div>
+  </div>
 </div>
 <div id="combo"></div>
 <div id="flash"></div>
@@ -286,7 +291,7 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=3; rows0=7; }            // portrait — BIG tiles (3 wide), tall to fill the frame
+  if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide to fill the FULL screen width
   else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
   else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
   else { cols0=9; rows0=3; }                 // ultra-wide
@@ -337,11 +342,10 @@ function computeBounds(){
   const pileW=maxX-minX;
   // fewer tray slots on phones (less clutter, bigger), more on desktop
   const a=camera.aspect; SLOTS = a<0.72 ? 5 : (a<1.25 ? 6 : 7);
-  // BIG, easy-to-read tray: a comfortable minimum width (can be wider than the pile on phones)
-  const trayMin = a<0.72 ? SLOTS*1.05 : SLOTS*0.78;
-  layout.traySpan=Math.max(trayMin,Math.min(9.0,pileW*1.05));
-  layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.9;   // tiles fill the slots more
-  layout.trayZ=maxZ+1.9; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.2;  // clear GAP from the pile; tile rests in the deeper trough
+  // tray spans the full pile width → big slots, big in-slot tiles
+  layout.traySpan=Math.max(SLOTS*0.66,Math.min(9.0,pileW));
+  layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.9;
+  layout.trayZ=maxZ+1.9; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale + 0.05;  // clear GAP from the pile; tile sits on the bright slot ring
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
@@ -364,7 +368,7 @@ function fitContent(){
   const pts=[]; for(const x of[layout.cMinX,layout.cMaxX]) for(const z of[layout.cMinZ,layout.cMaxZ]) for(const y of[layout.cMinY,layout.cMaxY]) pts.push(new THREE.Vector3(x,y,z));
   // FILL: solve the distance so the content reaches the safe margins (no big empty
   // borders). Extra top margin keeps the pile clear of the HUD chips.
-  const mx=(a<0.72?1.02:0.96), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3(); let d=12;
+  const mx=(a<0.72?1.06:0.97), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3(); let d=12;
   for(let it=0;it<6;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
     let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera); m=Math.max(m, Math.abs(tmp.x)/mx, (tmp.y>0?tmp.y/myTop:-tmp.y/myBot)); }
@@ -390,29 +394,20 @@ function buildTrayDock(){
   while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
   const n=SLOTS, gap=layout.trayGap||0.94, span=layout.traySpan||6.6, topY=layout.dockTop, z=layout.trayZ;
   const tileW=(layout.trayScale||0.82)*TILE;
-  const baseW=span+0.5, baseD=tileW+1.05, rimH=0.32, floorTop=topY-0.22;
-  // recessed FLOOR of the trough (dark) — tiles rest down inside it
-  const floor=new THREE.Mesh(new RoundedBoxGeometry(baseW,0.5,baseD,4,0.18),
-    new THREE.MeshPhysicalMaterial({color:0x111a38,roughness:0.62,metalness:0,clearcoat:0.5,clearcoatRoughness:0.3,envMapIntensity:0.18,emissive:0x0a1430,emissiveIntensity:0.28}));
-  floor.position.set(0,floorTop-0.25,z); floor.receiveShadow=true; trayDock.add(floor);
-  // raised rim frame (4 dark premium bars) → the row reads as a recessed trough
-  const rimMat=new THREE.MeshPhysicalMaterial({color:0x1b2750,roughness:0.4,metalness:0,clearcoat:0.85,clearcoatRoughness:0.2,envMapIntensity:0.3,emissive:0x0e1838,emissiveIntensity:0.15});
-  const barLR=new RoundedBoxGeometry(0.2,rimH,baseD,3,0.08), barFB=new RoundedBoxGeometry(baseW,rimH,0.2,3,0.08);
-  const rimCY=topY-rimH/2+0.03;
-  [-1,1].forEach(s=>{ const m=new THREE.Mesh(barLR,rimMat); m.position.set(s*(baseW/2-0.1),rimCY,z); m.receiveShadow=true; trayDock.add(m); });
-  [-1,1].forEach(s=>{ const m=new THREE.Mesh(barFB,rimMat); m.position.set(0,rimCY,z+s*(baseD/2-0.1)); m.receiveShadow=true; trayDock.add(m); });
-  // gold front trim
-  const trim=new THREE.Mesh(new RoundedBoxGeometry(baseW-0.12,0.05,0.1,3,0.03),
-    new THREE.MeshStandardMaterial({color:0x4a3a14,emissive:0xffd15f,emissiveIntensity:0.6,roughness:0.3,metalness:0.5}));
-  trim.position.set(0,topY+0.04,z+baseD/2-0.1); trayDock.add(trim);
-  // soft teal underglow
-  const halo=new THREE.Mesh(new RoundedBoxGeometry(baseW+0.3,0.08,baseD+0.3,3,0.3),
-    new THREE.MeshStandardMaterial({color:0x0a1428,emissive:0x46d6cf,emissiveIntensity:0.6,roughness:0.6,metalness:0}));
-  halo.position.set(0,floorTop-0.5,z); trayDock.add(halo);
-  // faint per-slot guides on the trough floor (marks the 7 places)
-  const ggeo=new RoundedBoxGeometry(tileW+0.06,0.03,tileW+0.06,3,0.1);
-  const gmat=new THREE.MeshStandardMaterial({color:0x0a1228,roughness:0.85,metalness:0,emissive:0x0d1a3a,emissiveIntensity:0.5});
-  for(let i=0;i<n;i++){ const x=(i-(n-1)/2)*gap; const g=new THREE.Mesh(ggeo,gmat); g.position.set(x,floorTop+0.005,z); g.receiveShadow=true; trayDock.add(g); }
+  const baseW=span+0.45, baseD=tileW+0.7;
+  // BRIGHT glossy bar — clean & premium, NOT a dim trough
+  const bar=new THREE.Mesh(new RoundedBoxGeometry(baseW,0.26,baseD,5,0.13),
+    new THREE.MeshPhysicalMaterial({color:0xcdd6f2,roughness:0.22,metalness:0.1,clearcoat:1.0,clearcoatRoughness:0.08,envMapIntensity:0.8}));
+  bar.position.set(0,topY-0.13,z); bar.receiveShadow=true; trayDock.add(bar);
+  // colourful glowing slot rings (bright, creative) + dark inset where the tile drops
+  const padGeo=new RoundedBoxGeometry(tileW+0.2,0.08,tileW+0.2,4,0.16);
+  const insGeo=new RoundedBoxGeometry(tileW+0.02,0.1,tileW+0.02,4,0.14);
+  const insMat=new THREE.MeshStandardMaterial({color:0x121426,roughness:0.7,metalness:0,emissive:0x0a0c18,emissiveIntensity:0.3});
+  const cols=[0x4ee0d0,0xffd15f,0xff7eb0,0x9a8cff,0x6be39a,0x5bc8ff,0xff9e78];
+  for(let i=0;i<n;i++){ const x=(i-(n-1)/2)*gap;
+    const ring=new THREE.Mesh(padGeo,new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:cols[i%cols.length],emissiveIntensity:0.95,roughness:0.4,metalness:0}));
+    ring.position.set(x,topY+0.01,z); trayDock.add(ring);
+    const ins=new THREE.Mesh(insGeo,insMat); ins.position.set(x,topY+0.03,z); trayDock.add(ins); }
 }
 function buildTrayFrames(){ buildTrayDock(); }
 
@@ -533,8 +528,11 @@ document.getElementById('resBtn').addEventListener('click',()=>{ if(S.won)nextLe
 document.getElementById('undoBtn').addEventListener('click',doUndo);
 document.getElementById('shuffleBtn').addEventListener('click',doShuffle);
 const muteBtn=document.getElementById('muteBtn');
-function drawMute(){ muteBtn.textContent=S.muted?'🔇':'🔊'; }
+function drawMute(){ muteBtn.querySelector('.ic').textContent=S.muted?'🔇':'🔊'; }
 muteBtn.addEventListener('click',()=>{ S.muted=!S.muted; drawMute(); if(S.muted){ musicNodes.forEach(o=>{try{o.stop();}catch(e){}}); musicNodes=[]; } else { startMusic(); } });
+// single toggle reveals the tools (undo / shuffle / mute)
+const toolsEl=document.getElementById('tools'), menuToggle=document.getElementById('menuToggle');
+menuToggle.addEventListener('click',()=>{ toolsEl.classList.toggle('closed'); menuToggle.textContent=toolsEl.classList.contains('closed')?'☰':'✕'; });
 
 // ---------------- resize ----------------
 let W=1,H=1;
