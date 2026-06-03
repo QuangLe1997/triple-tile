@@ -438,8 +438,10 @@ function clearTiles(){ for(const t of S.tiles){ tileGroup.remove(t.grp); } S.til
 function generate(level){
   applyTheme(themeForLevel(level));   // swap material / palette / icons / background / tray colour for this level's theme
   clearTiles(); S.history=[]; S.over=false; S.won=false; S.busy=false;
-  // difficulty ramps every level: deeper stacks + more icon types
-  const layers=Math.min(6,2+Math.floor(level/2));
+  // difficulty ramps every level: more icon types + denser pile + tighter time.
+  // layers are capped LOW (max 4) so pile height stays even → the view size is
+  // consistent level-to-level (no sudden shrink when a new stack layer appears).
+  const layers=Math.min(4,2+Math.floor(level/3));
   const typeCount=Math.min(SYMBOLS.length,4+level);
   // pile footprint MATCHES the visible viewport rectangle (wide on desktop, taller on phones)
   const a=camera.aspect||0.5;
@@ -456,8 +458,8 @@ function generate(level){
   const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step+(Math.random()-0.5)*0.1, z:offZ+r*step+0.3+(Math.random()-0.5)*0.1});
   const positions=[], height=cells.map(()=>0);
   for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:0}); height[i]=1; }
-  const baseDens=Math.min(0.62,0.42+(level-1)*0.025);   // higher levels = denser pile
-  for(let L=1;L<layers;L++){ const dens=baseDens-(L-1)*0.1;
+  const baseDens=Math.min(0.82,0.5+(level-1)*0.035);   // higher levels = denser pile (compensates for the lower layer cap)
+  for(let L=1;L<layers;L++){ const dens=baseDens-(L-1)*0.08;
     for(let i=0;i<cells.length;i++){ if(height[i]===L && Math.random()<dens){ height[i]++;
       positions.push({x:cells[i].x+(Math.random()-0.5)*0.36, z:cells[i].z+(Math.random()-0.5)*0.36, layer:L}); } } }
   // trim to a multiple of 3 by dropping a few TOP tiles (keeps every stack supported)
@@ -509,7 +511,11 @@ function computeBounds(){
   const tw=layout.traySpan/2+0.5;
   layout.cMinX=Math.min(minX-0.7,-tw); layout.cMaxX=Math.max(maxX+0.7,tw);
   layout.cMinZ=minZ-0.8; layout.cMaxZ=layout.trayZ+layout.trayGap/2+0.95;
-  layout.cMinY=-0.7; layout.cMaxY=maxY+0.4;
+  // Vertical fit is FOOTPRINT-driven (constant), NOT tied to stack height — so the
+  // view/zoom stays the SAME size on every level instead of shrinking as piles get
+  // taller. Stacks just rise into the reserved top margin. cMaxY is clamped to a
+  // small constant range; layers are capped (see generate) so peaks never hit the HUD.
+  layout.cMinY=-0.7; layout.cMaxY=Math.min(maxY+0.4, 1.0);
 }
 function fitContent(){
   const a=camera.aspect;
