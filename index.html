@@ -287,7 +287,7 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=4; rows0=5; }            // portrait — few, BIG, clear tiles
+  if(a<0.72){ cols0=4; rows0=7; }            // portrait — few BIG tiles, tall enough to fill up to the HUD
   else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
   else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
   else { cols0=9; rows0=3; }                 // ultra-wide
@@ -295,12 +295,13 @@ function generate(level){
   const offX=-(cols0-1)*step/2, offZ=-(rows0-1)*step/2;
   // build a grid of cells, then STACK tiles into columns (each upper tile rests on
   // the surface of the one below — supported, slightly offset, never interleaved)
-  const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step, z:offZ+r*step+0.3});
+  // grid cells with a little built-in jitter so the whole thing isn't a rigid grid
+  const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step+(Math.random()-0.5)*0.1, z:offZ+r*step+0.3+(Math.random()-0.5)*0.1});
   const positions=[], height=cells.map(()=>0);
-  for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.05, z:cells[i].z+(Math.random()-0.5)*0.05, layer:0}); height[i]=1; }
-  for(let L=1;L<layers;L++){ const dens=0.5-(L-1)*0.12;
+  for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:0}); height[i]=1; }
+  for(let L=1;L<layers;L++){ const dens=0.42-(L-1)*0.12;
     for(let i=0;i<cells.length;i++){ if(height[i]===L && Math.random()<dens){ height[i]++;
-      positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:L}); } } }
+      positions.push({x:cells[i].x+(Math.random()-0.5)*0.36, z:cells[i].z+(Math.random()-0.5)*0.36, layer:L}); } } }
   // trim to a multiple of 3 by dropping a few TOP tiles (keeps every stack supported)
   positions.sort((p,q)=>q.layer-p.layer); positions.splice(0, positions.length%3);
   const count=positions.length, slots=positions;
@@ -309,12 +310,12 @@ function generate(level){
   for(let i=0;i<slots.length;i++){
     const p=slots[i], type=bag[i];
     const grp=makeTileMesh(type);
-    const home=new THREE.Vector3(p.x, -0.06 + p.layer*(TILE*0.72+0.06), p.z);   // sit on the surface below + small seam (no interpenetration)
+    const home=new THREE.Vector3(p.x, -0.06 + p.layer*(TILE*0.72+0.06) + (Math.random()-0.5)*0.04, p.z);   // sit on the surface below + small seam
     grp.position.copy(home); grp.position.y+=6; grp.scale.setScalar(0.01); // drop-in anim
-    grp.rotation.y=(Math.random()-0.5)*0.25;
+    grp.rotation.y=(Math.random()-0.5)*0.5;   // random spin → natural, un-arranged
     tileGroup.add(grp);
     S.tiles.push({ id:id++, type, gx:p.x, gz:p.z, layer:p.layer, taken:false, gone:false,
-      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, introDelay:i*0.02, t:0, slot:-1, pop:0 });
+      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, introDelay:p.layer*0.13 + Math.random()*0.16, t:0, slot:-1, pop:0 });
   }
   computeBounds(); fitContent();
 }
@@ -323,7 +324,7 @@ function generate(level){
 function isFree(t){
   if(t.taken||t.gone) return false;
   for(const o of S.tiles){ if(o===t||o.taken||o.gone) continue; if(o.layer<=t.layer) continue;
-    if(Math.abs(o.gx-t.gx)<layout.step*0.7 && Math.abs(o.gz-t.gz)<layout.step*0.7) return false; }
+    if(Math.abs(o.gx-t.gx)<layout.step*0.6 && Math.abs(o.gz-t.gz)<layout.step*0.6) return false; }
   return true;
 }
 
@@ -337,14 +338,14 @@ function computeBounds(){
   const pileW=maxX-minX;
   // fewer tray slots on phones (less clutter, bigger), more on desktop
   const a=camera.aspect; SLOTS = a<0.72 ? 5 : (a<1.25 ? 6 : 7);
-  // premium tray: width tracks the pile; tiles fit slots with spacing
-  layout.traySpan=Math.max(SLOTS*0.95,Math.min(8.0,pileW+0.3));
+  // tray width = pile width (never wider) so the content matches the screen and fills it
+  layout.traySpan=Math.max(SLOTS*0.66,Math.min(8.0,pileW));
   layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.84;
-  layout.trayZ=maxZ+2.7; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // clear GAP from the pile; tile rests in the trough
+  layout.trayZ=maxZ+1.9; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // clear GAP from the pile; tile rests in the trough
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
-  const tw=layout.traySpan/2+0.95;
+  const tw=layout.traySpan/2+0.5;
   layout.cMinX=Math.min(minX-0.7,-tw); layout.cMaxX=Math.max(maxX+0.7,tw);
   layout.cMinZ=minZ-0.8; layout.cMaxZ=layout.trayZ+layout.trayGap/2+0.95;
   layout.cMinY=-0.7; layout.cMaxY=maxY+0.4;
@@ -354,7 +355,7 @@ function fitContent(){
   // Viewing pitch by device: phones tilt DOWN more (moderate 3D, less oblique →
   // the grid spreads to fill the tall frame); landscape uses a lower angle.
   let pitchY, fov;
-  if(a<0.72){ pitchY=2.25; fov=46; }       // portrait — tilted enough to SEE the stacking, still fills
+  if(a<0.72){ pitchY=2.5; fov=48; }        // portrait — top-down enough to fill, still shows stacking
   else if(a<1.25){ pitchY=1.8; fov=44; }   // square-ish
   else { pitchY=1.15; fov=40; }            // landscape — cinematic lower angle
   const dir=new THREE.Vector3(0,pitchY,1).normalize();
@@ -369,6 +370,15 @@ function fitContent(){
     let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera); m=Math.max(m, Math.abs(tmp.x)/mx, (tmp.y>0?tmp.y/myTop:-tmp.y/myBot)); }
     d*=m; }   // converges so content FILLS the frame
   camTarget.pos.copy(C).addScaledVector(dir,d); camTarget.look.copy(C);
+  // ANCHOR the tray to the bottom of the screen: pan vertically until the tray's
+  // front edge sits near the bottom margin (extra space, if any, goes to the top).
+  const anchor=new THREE.Vector3(0, layout.dockTop-0.35, layout.cMaxZ-0.2);
+  for(let k=0;k<6;k++){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look);
+    camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const ndcy=anchor.clone().project(camera).y, err=ndcy-(-0.955);
+    if(Math.abs(err)<0.01) break;
+    const halfH=d*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2);
+    camTarget.pos.y+=err*halfH; camTarget.look.y+=err*halfH; }
   if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
 }
 function layoutTray(){ computeBounds(); }
@@ -380,7 +390,7 @@ function buildTrayDock(){
   while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
   const n=SLOTS, gap=layout.trayGap||0.94, span=layout.traySpan||6.6, topY=layout.dockTop, z=layout.trayZ;
   const tileW=(layout.trayScale||0.82)*TILE;
-  const baseW=span+0.55, baseD=tileW+0.95, rimH=0.24, floorTop=topY-0.18;
+  const baseW=span+0.4, baseD=tileW+0.85, rimH=0.24, floorTop=topY-0.18;
   // recessed FLOOR of the trough (dark) — tiles rest down inside it
   const floor=new THREE.Mesh(new RoundedBoxGeometry(baseW,0.5,baseD,4,0.18),
     new THREE.MeshPhysicalMaterial({color:0x111a38,roughness:0.62,metalness:0,clearcoat:0.5,clearcoatRoughness:0.3,envMapIntensity:0.18,emissive:0x0a1430,emissiveIntensity:0.28}));
