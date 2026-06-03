@@ -325,31 +325,42 @@ function isFree(t){
 // ---------------- camera framing (scientific auto-fit) ----------------
 // The WORLD layout is device-independent; the camera distance is solved so the
 // whole play content fits any screen/aspect with comfortable margins.
-const FIT_DIR=new THREE.Vector3(0,1.25,1).normalize();   // steeper top-down pitch (compact, clean)
 function computeBounds(){
   let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9;
   for(const t of S.tiles){ if(t.gone)continue; minX=Math.min(minX,t.home.x);maxX=Math.max(maxX,t.home.x);minZ=Math.min(minZ,t.home.z);maxZ=Math.max(maxZ,t.home.z); }
   if(!isFinite(minX)){ minX=-2.5;maxX=2.5;minZ=-2.5;maxZ=1.5; }
   const pileW=maxX-minX;
-  // premium tray: width adapts to the pile, placed in front of it
+  // premium tray: width adapts to the pile, placed in front of it (with a clear gap)
   layout.traySpan=Math.max(6.0,Math.min(7.6,pileW+1.4));
-  layout.trayGap=layout.traySpan/7; layout.trayZ=maxZ+1.7; layout.trayY=0.18; layout.dockTop=layout.trayY-TILE*0.21;
+  layout.trayGap=layout.traySpan/7; layout.trayScale=layout.trayGap*0.82;   // tray tiles fit slots WITH spacing (never overlap)
+  layout.trayZ=maxZ+1.9; layout.trayY=0.05; layout.dockTop=layout.trayY - TILE*0.3*layout.trayScale + 0.1;  // tiles seated into the sockets
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
-  // content bounds = pile ∪ tray dock (padded by a tile)
-  const tw=layout.traySpan/2+0.5;
+  // content bounds = pile ∪ FULL tray dock (incl. glow halo) so the dock is always fully on-screen
+  const tw=layout.traySpan/2+0.95;
   layout.cMinX=Math.min(minX-0.7,-tw); layout.cMaxX=Math.max(maxX+0.7,tw);
-  layout.cMinZ=minZ-0.8; layout.cMaxZ=layout.trayZ+layout.trayGap/2+0.7;
+  layout.cMinZ=minZ-0.8; layout.cMaxZ=layout.trayZ+layout.trayGap/2+0.95;
 }
 function fitContent(){
   const a=camera.aspect, cl=THREE.MathUtils.clamp;
-  // continuous framing (smooth across every device aspect) — pile upper, tray lower
+  // Per-device pitch: phones look DOWN more (less oblique tilt → grid reads as a
+  // rectangle that fills the screen); landscape uses a lower, cinematic angle.
   let fov,h,dist,lookZ;
-  if(a<=0.62){ const t=cl((0.62-a)/0.20,0,1); fov=51+4*t; dist=12.4+0.5*t; h=8.2; lookZ=1.7; }       // tall portrait
-  else if(a<=1.0){ const t=(a-0.62)/0.38; fov=51-4*t; dist=12.4+1.1*t; h=8.2+0.2*t; lookZ=1.7-0.35*t; } // square-ish
-  else { const t=cl((a-1.0)/0.9,0,1); fov=47-11*t; dist=13.5+1.6*t; h=8.4; lookZ=1.35-0.25*t; }        // landscape
+  if(a<=0.62){ const t=cl((0.62-a)/0.22,0,1); fov=50+5*t; dist=10.6-0.4*t; h=9.8+0.4*t; lookZ=1.1; }   // tall portrait — top-down-ish
+  else if(a<=1.0){ const t=(a-0.62)/0.38; fov=50-5*t; dist=10.6+2.4*t; h=9.8-1.4*t; lookZ=1.1+0.1*t; } // square-ish
+  else { const t=cl((a-1.0)/0.9,0,1); fov=45-9*t; dist=13.0+1.8*t; h=8.4; lookZ=1.2-0.3*t; }            // landscape — lower angle
   camera.fov=fov; camera.updateProjectionMatrix();
   camTarget.pos.set(0,h,dist); camTarget.look.set(0,0,lookZ);
+  // GUARANTEE the whole content (pile + premium tray) fits: zoom out along the
+  // view direction if any corner would fall outside the safe frame (never zoom in).
+  const dir=camTarget.pos.clone().sub(camTarget.look);
+  const pts=[]; for(const x of[layout.cMinX,layout.cMaxX]) for(const z of[layout.cMinZ,layout.cMaxZ]) for(const y of[-0.6,0.7]) pts.push(new THREE.Vector3(x,y,z));
+  const mx=0.965,my=0.95,tmp=new THREE.Vector3();
+  for(let it=0;it<3;it++){ camera.position.copy(camTarget.look).add(dir); camera.lookAt(camTarget.look);
+    camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    let m=1; for(const p of pts){ tmp.copy(p).project(camera); m=Math.max(m,Math.abs(tmp.x)/mx,Math.abs(tmp.y)/my); }
+    if(m>1.001) dir.multiplyScalar(m); else break; }
+  camTarget.pos.copy(camTarget.look).add(dir);
   if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
 }
 function layoutTray(){ computeBounds(); }
@@ -544,11 +555,13 @@ function animate(){
           else { t.vy=0; }
         }
         const stretch=t.vy>0?Math.min(0.25,t.vy*0.03):0;
-        g.scale.set((1-stretch*0.6)*(1+0.22*t.squash),(1+stretch)*(1-0.34*t.squash),(1-stretch*0.6)*(1+0.22*t.squash));
+        const fb=(t.state==='return')?1:(layout.trayScale||0.82);   // shrink to fit the slot while flying in
+        const cur=ease(g.scale.x/(1+0.22*t.squash), fb, 0.2);       // ease base scale toward target
+        g.scale.set(cur*(1-stretch*0.6)*(1+0.22*t.squash),cur*(1+stretch)*(1-0.34*t.squash),cur*(1-stretch*0.6)*(1+0.22*t.squash));
         g.rotation.y=ease(g.rotation.y,0,0.22); }
     else if(t.state==='tray'){ const tp=trayPos(t.slot); t.home.copy(tp);
         g.position.x=ease(g.position.x,tp.x,0.25); g.position.z=ease(g.position.z,tp.z,0.25);
-        g.position.y=ease(g.position.y, tp.y+Math.sin(tnow*3+t.slot)*0.02, 0.3); setScaleSquash(g,1,t.squash); }
+        g.position.y=ease(g.position.y, tp.y+Math.sin(tnow*3+t.slot)*0.02, 0.3); setScaleSquash(g,layout.trayScale||0.82,t.squash); }
     else if(t.state==='pop'){ t.t+=dt*3; const s=Math.max(0.001,1.35-t.t*1.7); g.scale.setScalar(s); g.position.y+=dt*1.6; g.rotation.y+=dt*7;
         if(t.t>=1){ t.gone=true; tileGroup.remove(g); S.tiles.splice(i,1); } }
   }
