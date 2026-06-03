@@ -284,10 +284,10 @@ const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 function makeTileMesh(type){
   const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.22,metalness:0.0,
-    clearcoat:1.0,clearcoatRoughness:0.04,sheen:0.6,sheenRoughness:0.3,sheenColor:new THREE.Color(0xffffff),
-    iridescence:0.35,iridescenceIOR:1.35,specularIntensity:1.0,envMapIntensity:1.15,
-    emissive:f.b,emissiveIntensity:0.12});   // polished + iridescent cosmic sheen, vivid premium
+  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.18,metalness:0.15,
+    clearcoat:1.0,clearcoatRoughness:0.03,sheen:0.8,sheenRoughness:0.25,sheenColor:new THREE.Color(0xffffff),
+    iridescence:0.7,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],
+    specularIntensity:1.0,envMapIntensity:1.4,emissive:f.b,emissiveIntensity:0.16});   // glossy + strong iridescent cosmic sheen
   const box=new THREE.Mesh(GEO,mat); box.castShadow=true; box.receiveShadow=true;
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
   icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.365;
@@ -340,7 +340,7 @@ function generate(level){
     grp.rotation.y=(Math.random()-0.5)*0.5;   // random spin → natural, un-arranged
     tileGroup.add(grp);
     S.tiles.push({ id:id++, type, gx:p.x, gz:p.z, layer:p.layer, taken:false, gone:false,
-      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, rvx:0, rvz:0, introDelay:p.layer*0.05 + Math.random()*0.12, t:0, slot:-1, pop:0 });
+      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, rvx:0, rvz:0, introDelay:(i<3? i*0.16 : 0.85 + Math.random()*0.3), t:0, slot:-1, pop:0 });
   }
   computeBounds(); fitContent();
 }
@@ -390,21 +390,24 @@ function fitContent(){
   // FILL: solve the distance so the content reaches the safe margins (no big empty
   // borders). Extra top margin keeps the pile clear of the HUD chips.
   const portrait=a<0.72; const mx=(portrait?1.0:0.97), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3(); let d=12;
-  for(let it=0;it<6;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
+  for(let it=0;it<7;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera); const xx=Math.abs(tmp.x)/mx, yy=(tmp.y>0?tmp.y/myTop:-tmp.y/myBot);
-      m=Math.max(m, portrait?xx:Math.max(xx,yy)); }   // portrait → fill the FULL width (100%), no side gap
-    d*=m; }
+    let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera);
+      if(!isFinite(tmp.x)||!isFinite(tmp.y)||tmp.z>1) continue;   // ignore points behind / past the far plane (bad projection)
+      const xx=Math.abs(tmp.x)/mx, yy=(tmp.y>0?tmp.y/myTop:-tmp.y/myBot);
+      m=Math.max(m, portrait?xx:Math.max(xx,yy)); }   // portrait → fill the FULL width (100%)
+    m=THREE.MathUtils.clamp(m,0.5,1.8); d=THREE.MathUtils.clamp(d*m,6,46); }   // no wild zoom jumps
   camTarget.pos.copy(C).addScaledVector(dir,d); camTarget.look.copy(C);
   // ANCHOR the tray to the bottom of the screen: pan vertically until the tray's
   // front edge sits near the bottom margin (extra space, if any, goes to the top).
-  const anchor=new THREE.Vector3(0, layout.dockTop-0.35, layout.cMaxZ-0.2);
+  const anchor=new THREE.Vector3(0, layout.dockTop-0.35, layout.cMaxZ-0.2); let panAcc=0;
   for(let k=0;k<6;k++){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look);
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    const ndcy=anchor.clone().project(camera).y, err=ndcy-(-0.955);
+    const py=anchor.clone().project(camera).y; if(!isFinite(py)) break; const err=py-(-0.955);
     if(Math.abs(err)<0.01) break;
     const halfH=d*Math.tan(THREE.MathUtils.degToRad(camera.fov)/2);
-    camTarget.pos.y+=err*halfH; camTarget.look.y+=err*halfH; }
+    const dy=THREE.MathUtils.clamp(err*halfH,-2,2); panAcc+=dy; if(Math.abs(panAcc)>9) break;
+    camTarget.pos.y+=dy; camTarget.look.y+=dy; }
   if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
 }
 function layoutTray(){ computeBounds(); }
@@ -640,7 +643,7 @@ function animate(){
   motes.rotation.y += dt*0.02; motes.position.y = Math.sin(tnow*0.3)*0.3;
   // camera: FAST dramatic swoop while the tiles tumble in (catches the glossy edges)
   if(S.phase==='intro'){
-    S.introT+=dt; const dur=1.5; let e=Math.min(1,S.introT/dur); e=1-Math.pow(1-e,3);   // easeOutCubic
+    S.introT+=dt; const dur=2.0; let e=Math.min(1,S.introT/dur); e=1-Math.pow(1-e,3);   // easeOutCubic
     const look=camTarget.look, base=camTarget.pos.clone().sub(look);
     const ang=(1-e)*(-0.65), lift=(1-e)*(-3.2), out=1-(1-e)*0.22;   // start low, rotated & close → ease to play view
     const cx=base.x*Math.cos(ang)-base.z*Math.sin(ang), cz=base.x*Math.sin(ang)+base.z*Math.cos(ang);
