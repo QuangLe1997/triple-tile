@@ -44,6 +44,21 @@ Mobile-first H5 casual game, deployed on GitHub Pages. Vanilla ES modules, no bu
 - [ ] Every merge/drop/combo has visual + audio + haptic feedback.
 - [ ] Plays smoothly under 4× CPU throttle.
 
-## Layout research (pending)
-Deep-dive on layout trends for this genre: best themes, top/bottom composition,
-item size & spacing that players prefer → drives the layout redesign.
+## Layout research (DONE) — key verified findings
+Deep-research report (24 sources, 22 verified claims). Drivers behind the layout redesign:
+
+- **The hook = tactile "fidget-toy" feel of digging 3D items out of a crowded pile,
+  contrasted with a CLEAN interaction.** Pile = visually full/satisfying; tray + controls = clean & comfortable. (DoF, Udonis)
+- **Claymorphism fits** the hook (soft rounded weighty objects); the *physical-weight rendering* matters
+  more than the specific theme. Long-term retention comes from the **META layer** (progression/collection) — TODO.
+- **Portrait zoning (thumb-zone heat map):** HUD ~10–15% (top, hard-to-reach), play area/pile ~55–65% (middle),
+  **tray + primary controls ~22–30% (bottom easy-reach arc)**, above safe-area. (Smashing, Hurff)
+- **Touch targets ≥ 48dp** (Material 3) / 44pt (iOS); **≥ 8dp spacing** between tray slots/buttons
+  (the pile may overlap, but tap resolves to the topmost tile).
+- **7-slot collection tray** is the genre convention (Triple Match 3D, Tile Busters); **fail = all 7 filled
+  without a triple** (spatial pressure, not a timer) — this is what turns the toy into a puzzle.
+- **Onboarding:** teach the single core mechanic in the first few levels (reduce D1 churn).
+- **Juice:** tap → lift/pop w/ weight → snap to slot; triple-clear = scale-pop + particles + sound + **haptic**.
+
+Open question (not resolved by sources): exact pile density sweet-spot vs tap accuracy, and which
+meta-layer best drives D14/D30 retention.

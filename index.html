@@ -198,6 +198,8 @@ const sndMatch=()=>{ [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'tri
 const sndErr  =()=>beep(170,0.18,'sawtooth',0.18,90);
 const sndWin  =()=>{ [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'triangle',0.28),i*90)); };
 const sndOver =()=>{ beep(400,0.5,'sawtooth',0.3,80); setTimeout(()=>beep(200,0.45,'sawtooth',0.24,60),180); };
+// haptics
+function buzz(p){ if(navigator.vibrate){ try{ navigator.vibrate(p); }catch(e){} } }
 
 // ---------------- three setup ----------------
 const canvas=document.getElementById('c');
@@ -228,9 +230,13 @@ const p3=new THREE.PointLight(0xFFC75F,10,30); p3.position.set(0,6,-5); scene.ad
 // reflective floor + podium
 const floorMat=new THREE.MeshStandardMaterial({color:0x0b0f1c,metalness:0.5,roughness:0.55,envMapIntensity:0.3});
 const floor=new THREE.Mesh(new THREE.CircleGeometry(26,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; scene.add(floor);
-const podium=new THREE.Mesh(new THREE.CylinderGeometry(6.6,7.0,0.5,72),
-  new THREE.MeshPhysicalMaterial({color:0x161d36,metalness:0.0,roughness:0.62,clearcoat:0.35,clearcoatRoughness:0.4,envMapIntensity:0.25}));
-podium.position.y=-0.55; scene.add(podium);
+// soft contact shadow under the pile (grounds it without a bright disc)
+const shadowTex=(function(){ const cv=document.createElement('canvas'); cv.width=cv.height=128; const g=cv.getContext('2d');
+  const grd=g.createRadialGradient(64,64,6,64,64,64); grd.addColorStop(0,'rgba(0,0,0,0.5)'); grd.addColorStop(0.6,'rgba(0,0,0,0.22)'); grd.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grd; g.fillRect(0,0,128,128); const t=new THREE.CanvasTexture(cv); return t; })();
+const shadowDisc=new THREE.Mesh(new THREE.PlaneGeometry(8.5,7),
+  new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,depthWrite:false}));
+shadowDisc.rotation.x=-Math.PI/2; shadowDisc.position.set(0,-0.57,0.3); scene.add(shadowDisc);
 
 // ambient floaty motes
 const motes=(function(){ const n=90,g=new THREE.BufferGeometry(),pos=new Float32Array(n*3);
@@ -273,7 +279,7 @@ function makeTileMesh(type){
 }
 
 // ---------------- layout / generation ----------------
-let layout={ originX:0, originZ:0, step:1.42, trayY:0.35, trayZ:0, traySpan:0 };
+let layout={ originX:0, originZ:0, step:1.16, trayY:0.35, trayZ:0, traySpan:0 };
 
 function rnd(n){ return Math.floor(Math.random()*n); }
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -289,11 +295,11 @@ function generate(level){
   const positions=[];
   for(let L=0;L<layers;L++){
     const cols=Math.max(2,cols0-L), rows=Math.max(2,rows0-(L>0?L:0));
-    const offX=-(cols-1)*step/2 + (L%2)*step*0.5;
-    const offZ=-(rows-1)*step/2 + (L%2)*step*0.5;
+    const offX=-(cols-1)*step/2;
+    const offZ=-(rows-1)*step/2;
     for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
-      if(L>0 && Math.random()<0.14) continue;
-      positions.push({ x:offX+c*step + (Math.random()-0.5)*0.04, z:offZ+r*step - 1.3 + (Math.random()-0.5)*0.04, layer:L });
+      if(L>0 && Math.random()<0.10) continue;
+      positions.push({ x:offX+c*step + (Math.random()-0.5)*0.04, z:offZ+r*step + 0.3 + (Math.random()-0.5)*0.04, layer:L });
     }
   }
   shuffleArr(positions);
@@ -304,7 +310,7 @@ function generate(level){
   for(let i=0;i<slots.length;i++){
     const p=slots[i], type=bag[i];
     const grp=makeTileMesh(type);
-    const home=new THREE.Vector3(p.x, 0.06 + p.layer*0.36, p.z);
+    const home=new THREE.Vector3(p.x, -0.06 + p.layer*0.34, p.z);
     grp.position.copy(home); grp.position.y+=6; grp.scale.setScalar(0.01); // drop-in anim
     grp.rotation.y=(Math.random()-0.5)*0.25;
     tileGroup.add(grp);
@@ -325,31 +331,46 @@ function isFree(t){
 // ---------------- camera framing ----------------
 function fitCamera(){
   const aspect=camera.aspect;
-  let dist, h, fov, lookY=0.4, lookZ=0.0;
-  if(aspect<0.62){ fov=52; dist=12.2; h=9.2; }
-  else if(aspect<0.9){ fov=48; dist=12.0; h=9.2; }
-  else if(aspect<1.4){ fov=42; dist=13.0; h=9.0; }
-  else { fov=36; dist=14.6; h=8.8; }
+  // portrait-first framing: pile fills the upper view, premium tray dock anchors the bottom
+  let dist, h, fov, lookY=0.0, lookZ=1.7;
+  if(aspect<0.5){ fov=54; dist=12.6; h=8.2; }
+  else if(aspect<0.62){ fov=51; dist=12.4; h=8.2; }
+  else if(aspect<0.9){ fov=47; dist=12.2; h=8.2; }
+  else if(aspect<1.4){ fov=42; dist=13.4; h=8.4; lookZ=1.4; }
+  else { fov=36; dist=15.0; h=8.2; lookZ=1.2; }
   camera.fov=fov; camera.position.set(0,h,dist); camera.lookAt(0,lookY,lookZ); camera.updateProjectionMatrix();
   layoutTray();
 }
 function layoutTray(){
   const n=7; const span=aspectSpan(); layout.traySpan=span; const gap=span/n;
-  layout.trayGap=gap; layout.trayZ=4.4; layout.trayY=0.3;
+  layout.trayGap=gap; layout.trayZ=4.4; layout.trayY=0.18; layout.dockTop=layout.trayY - TILE*0.21;
+  buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; const tp=trayPos(i); t.home.copy(tp); }
 }
-function aspectSpan(){ const a=camera.aspect; return a<0.7 ? 6.2 : (a<1 ? 6.6 : 7.0); }
+function aspectSpan(){ const a=camera.aspect; return a<0.5 ? 6.0 : (a<0.7 ? 6.4 : (a<1 ? 6.8 : 7.2)); }
 function trayPos(i){ const n=7,gap=layout.trayGap||0.94; const x=(i-(n-1)/2)*gap; return new THREE.Vector3(x,layout.trayY,layout.trayZ); }
 
-// tray slot frames
-const trayFrames=new THREE.Group(); scene.add(trayFrames);
-function buildTrayFrames(){
-  while(trayFrames.children.length) trayFrames.remove(trayFrames.children[0]);
-  const n=7, gap=layout.trayGap||0.94;
-  const fgeo=new RoundedBoxGeometry(gap*0.92,0.12,gap*0.92,4,0.12);
-  const fmat=new THREE.MeshStandardMaterial({color:0x0e1622,metalness:0.5,roughness:0.5,emissive:0x16303a,emissiveIntensity:0.25,transparent:true,opacity:0.85});
-  for(let i=0;i<n;i++){ const m=new THREE.Mesh(fgeo,fmat); const x=(i-(n-1)/2)*gap; m.position.set(x,layout.trayY-0.22,layout.trayZ); trayFrames.add(m); }
+// ---------------- premium TRAY DOCK (separated from the pile) ----------------
+const trayDock=new THREE.Group(); scene.add(trayDock);
+function buildTrayDock(){
+  while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
+  const n=7, gap=layout.trayGap||0.94, span=layout.traySpan||6.6;
+  const baseW=span+0.7, baseD=gap+0.7, topY=layout.dockTop, z=layout.trayZ;
+  const baseH=0.6, baseCY=topY-baseH/2;
+  // glowing accent halo under the dock (premium rim)
+  const halo=new THREE.Mesh(new RoundedBoxGeometry(baseW+0.5,0.14,baseD+0.5,4,0.4),
+    new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:0x4ECDC4,emissiveIntensity:1.4,roughness:0.4,metalness:0}));
+  halo.position.set(0,baseCY-baseH*0.42,z); trayDock.add(halo);
+  // main dock slab (dark glossy clay)
+  const base=new THREE.Mesh(new RoundedBoxGeometry(baseW,baseH,baseD,5,0.22),
+    new THREE.MeshPhysicalMaterial({color:0x1b2440,roughness:0.42,metalness:0,clearcoat:1.0,clearcoatRoughness:0.18,envMapIntensity:0.5,emissive:0x10182e,emissiveIntensity:0.18}));
+  base.position.set(0,baseCY,z); trayDock.add(base);
+  // inset slot wells
+  const wgeo=new RoundedBoxGeometry(gap*0.82,0.16,gap*0.82,4,0.14);
+  const wmat=new THREE.MeshStandardMaterial({color:0x0c1120,roughness:0.7,metalness:0,emissive:0x1a2740,emissiveIntensity:0.25});
+  for(let i=0;i<n;i++){ const m=new THREE.Mesh(wgeo,wmat); m.position.set((i-(n-1)/2)*gap, topY-0.02, z); trayDock.add(m); }
 }
+function buildTrayFrames(){ buildTrayDock(); }
 
 // ---------------- gameplay ----------------
 function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true;
@@ -359,13 +380,13 @@ function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min
 
 function pickTile(t){
   if(S.busy||S.over||!S.started) return;
-  if(!isFree(t)){ sndErr(); bump(t); return; }
+  if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
   if(S.trayArr.length>=7) return;
   t.taken=true;
   let idx=S.trayArr.length;
   for(let i=S.trayArr.length-1;i>=0;i--){ if(S.trayArr[i].type===t.type){ idx=i+1; break; } }
   S.trayArr.splice(idx,0,t); t.state='fly'; t.t=0;
-  S.history.push(t.id); sndPick(); relayoutTray();
+  S.history.push(t.id); sndPick(); buzz(9); relayoutTray();
   resolveTray();
 }
 function relayoutTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i)); if(t.state!=='fly')t.state='fly'; t.t=Math.min(t.t,0.0001); } }
@@ -377,7 +398,7 @@ function resolveTray(){
   S.busy=true; const removing=[]; let need=3;
   S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt&&need>0){ need--; removing.push(t); return false; } return true; });
   for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position, t.type); }
-  S.score+=30; S.history=[]; sndMatch(); showCombo('MATCH!'); flash(0.5); shake(0.5);
+  S.score+=30; S.history=[]; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.5); shake(0.5);
   relayoutTray();
   setTimeout(()=>{ S.busy=false; afterResolve(); }, 360);
 }
@@ -387,9 +408,9 @@ function afterResolve(){ refreshHUD();
   if(S.trayArr.length>=7){ gameOver(); }
 }
 function winLevel(){ S.score+=100+S.level*20; if(S.score>S.best){ S.best=S.score; saveBest(); }
-  refreshHUD(); sndWin(); confetti(); setTimeout(()=>showResult(true),650); }
+  refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti(); setTimeout(()=>showResult(true),650); }
 function gameOver(){ S.over=true; if(S.score>S.best){ S.best=S.score; saveBest(); }
-  refreshHUD(); sndOver(); shake(1.2); setTimeout(()=>showResult(false),450); }
+  refreshHUD(); sndOver(); buzz([0,80,40,120]); shake(1.2); setTimeout(()=>showResult(false),450); }
 
 function doUndo(){ if(S.busy||S.over||S.undo<=0||S.history.length===0) return;
   const id=S.history.pop(); const idx=S.trayArr.findIndex(t=>t.id===id); if(idx<0)return;
