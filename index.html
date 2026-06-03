@@ -271,7 +271,7 @@ function makeTileMesh(type){
 }
 
 // ---------------- layout / generation ----------------
-let layout={ originX:0, originZ:0, step:1.16, trayY:0.35, trayZ:0, traySpan:0 };
+let layout={ originX:0, originZ:0, step:1.34, trayY:0.35, trayZ:0, traySpan:0 };
 
 function rnd(n){ return Math.floor(Math.random()*n); }
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -285,10 +285,10 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=5; rows0=6; }            // portrait — taller
-  else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
-  else if(a<1.8){ cols0=8; rows0=4; }        // landscape
-  else { cols0=10; rows0=3; }                // ultra-wide
+  if(a<0.72){ cols0=4; rows0=5; }            // portrait — taller, bigger tiles
+  else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
+  else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
+  else { cols0=9; rows0=3; }                 // ultra-wide
   const step=layout.step;
   const positions=[];
   for(let L=0;L<layers;L++){
@@ -337,7 +337,7 @@ function computeBounds(){
   // premium tray: width adapts to the pile, placed in front of it (with a clear gap)
   layout.traySpan=Math.max(6.0,Math.min(8.0,pileW+1.3));
   layout.trayGap=layout.traySpan/7; layout.trayScale=layout.trayGap*0.82;   // tray tiles fit slots WITH spacing (never overlap)
-  layout.trayZ=maxZ+1.5; layout.trayY=0.05; layout.dockTop=layout.trayY - TILE*0.3*layout.trayScale + 0.1;  // tiles seated into the sockets
+  layout.trayZ=maxZ+2.9; layout.trayY=0.05; layout.dockTop=layout.trayY - TILE*0.3*layout.trayScale + 0.1;  // clear separation from the pile
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
