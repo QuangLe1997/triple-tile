@@ -1,0 +1,16 @@
+{
+  "name": "Triple Match 3D",
+  "short_name": "Triple 3D",
+  "description": "A glossy 3D tile-matching puzzle. Tap shiny 3D blocks into the tray and match 3 of a kind across evolving worlds.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0e15",
+  "theme_color": "#0a0e15",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -6,6 +6,13 @@
 <title>TRIPLE MATCH 3D — Neon Tile Puzzle</title>
 <meta name="description" content="Triple Match 3D — a glossy 3D tile-matching puzzle. Tap shiny 3D blocks into the tray and match 3 of a kind. Crisp colors, smooth effects, juicy mobile fun." />
 <meta name="theme-color" content="#0a0e15" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Triple 3D" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="TRIPLE MATCH 3D — Neon Tile Puzzle" />
 <meta property="og:description" content="Tap glossy 3D blocks into the tray and match 3 of a kind. A juicy neon 3D puzzle." />
@@ -934,6 +941,8 @@ function animate(){
 loadBest(); loadMeta(); refreshMenu(); drawMute(); resize(); refreshHUD(); animate();
 document.getElementById('loading').classList.add('hidden');
 ['pointerdown','pointerup','touchstart','touchend','click','keydown'].forEach(ev=>window.addEventListener(ev,unlock,{passive:true}));
+// PWA: installable + offline play
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
 </script>
 </body>
 </html>
