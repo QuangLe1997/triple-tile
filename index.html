@@ -59,6 +59,33 @@
     text-align:center;gap:22px;background:radial-gradient(120% 90% at 50% 38%,rgba(18,26,38,.6),rgba(6,9,14,.95));
     backdrop-filter:blur(7px);transition:opacity .35s;}
   .overlay.hidden{opacity:0;pointer-events:none;}
+  /* HOME = full-bleed banner art (title baked into the image), with a bottom dock */
+  #menu{align-items:stretch;justify-content:flex-end;padding:0;gap:0;backdrop-filter:none;
+    background:
+      linear-gradient(to top,rgba(6,9,14,.94) 0%,rgba(6,9,14,.55) 20%,transparent 46%),
+      linear-gradient(to bottom,rgba(6,9,14,.45) 0%,transparent 26%),
+      url('banner-desktop.png') center center / cover no-repeat,
+      var(--bg);
+    animation:menuIn .6s ease both;}
+  @keyframes menuIn{from{opacity:0;}to{opacity:1;}}
+  @media (max-width:600px){
+    #menu{background:
+      linear-gradient(to top,rgba(6,9,14,.96) 0%,rgba(6,9,14,.55) 24%,transparent 52%),
+      url('banner-mobile.png') center top / 100% auto no-repeat,
+      var(--bg);}
+  }
+  .menu-dock{position:relative;z-index:2;width:100%;display:flex;flex-direction:column;align-items:center;
+    gap:14px;padding:0 22px max(34px,calc(env(safe-area-inset-bottom) + 22px));
+    animation:dockIn .6s .15s cubic-bezier(.2,.8,.2,1) both;}
+  @keyframes dockIn{from{opacity:0;transform:translateY(26px);}to{opacity:1;transform:none;}}
+  .menu-dock .help{max-width:440px;text-align:center;text-shadow:0 2px 14px rgba(0,0,0,.9);}
+  .btn-play{width:min(440px,86vw);padding:18px 26px;font-size:18px;letter-spacing:3px;border-radius:16px;
+    background:linear-gradient(100deg,rgba(84,214,178,.92),rgba(231,192,106,.92));border:0;color:#08110d;font-weight:800;
+    box-shadow:0 16px 40px -10px rgba(84,214,178,.65),0 6px 20px rgba(0,0,0,.5);animation:playPulse 2.4s ease-in-out infinite;}
+  .btn-play:hover{filter:brightness(1.06);transform:translateY(-2px);}
+  @keyframes playPulse{0%,100%{box-shadow:0 16px 40px -10px rgba(84,214,178,.55),0 6px 20px rgba(0,0,0,.5);}
+    50%{box-shadow:0 18px 52px -8px rgba(84,214,178,.9),0 6px 20px rgba(0,0,0,.5);}}
+  @media (prefers-reduced-motion:reduce){ #menu,.menu-dock{animation:none;} .btn-play{animation:none;} }
   .title{font-size:clamp(40px,12vw,80px);font-weight:800;letter-spacing:4px;line-height:.95;
     background:linear-gradient(105deg,var(--mint),var(--cream) 50%,var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 4px 22px rgba(0,0,0,.5));}
@@ -97,10 +124,9 @@
 <div id="flash"></div>
 
 <div class="overlay" id="menu">
-  <div><div class="title">TRIPLE<br>TILE</div><div class="sub">Tap · match 3 · clear</div></div>
-  <div class="panel">
-    <div class="help">Tap tiles into the tray below.<br>Line up <b>3 of a kind</b> to clear them.<br>Fill all 7 slots and it's over!</div>
-    <div style="margin-top:18px"><div class="btn btn-primary" id="startBtn">PLAY ▶</div></div>
+  <div class="menu-dock">
+    <div class="help">Tap tiles into the tray · line up <b>3 of a kind</b> to clear them.</div>
+    <div class="btn btn-play" id="startBtn">PLAY ▶</div>
   </div>
 </div>
 
