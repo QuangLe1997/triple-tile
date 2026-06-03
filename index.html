@@ -273,6 +273,7 @@ function makeTileMesh(type){
 
 // ---------------- layout / generation ----------------
 let layout={ originX:0, originZ:0, step:1.34, trayY:0.35, trayZ:0, traySpan:0 };
+let SLOTS=7;   // tray slots — fewer on phones (set per device in computeBounds)
 
 function rnd(n){ return Math.floor(Math.random()*n); }
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -286,10 +287,10 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=5; rows0=8; }            // portrait — narrow & tall to match the screen
-  else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
-  else if(a<1.8){ cols0=8; rows0=3; }        // landscape — wide
-  else { cols0=10; rows0=3; }                // ultra-wide
+  if(a<0.72){ cols0=4; rows0=5; }            // portrait — few, BIG, clear tiles
+  else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
+  else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
+  else { cols0=9; rows0=3; }                 // ultra-wide
   const step=layout.step;
   const offX=-(cols0-1)*step/2, offZ=-(rows0-1)*step/2;
   // build a grid of cells, then STACK tiles into columns (each upper tile rests on
@@ -297,7 +298,7 @@ function generate(level){
   const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step, z:offZ+r*step+0.3});
   const positions=[], height=cells.map(()=>0);
   for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.05, z:cells[i].z+(Math.random()-0.5)*0.05, layer:0}); height[i]=1; }
-  for(let L=1;L<layers;L++){ const dens=0.6-(L-1)*0.1;
+  for(let L=1;L<layers;L++){ const dens=0.5-(L-1)*0.12;
     for(let i=0;i<cells.length;i++){ if(height[i]===L && Math.random()<dens){ height[i]++;
       positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:L}); } } }
   // trim to a multiple of 3 by dropping a few TOP tiles (keeps every stack supported)
@@ -334,10 +335,12 @@ function computeBounds(){
   for(const t of S.tiles){ if(t.gone)continue; minX=Math.min(minX,t.home.x);maxX=Math.max(maxX,t.home.x);minZ=Math.min(minZ,t.home.z);maxZ=Math.max(maxZ,t.home.z);maxY=Math.max(maxY,t.home.y); }
   if(!isFinite(minX)){ minX=-2.5;maxX=2.5;minZ=-2.5;maxZ=1.5;maxY=0.4; }
   const pileW=maxX-minX;
-  // premium tray: width adapts to the pile, placed in front of it (with a clear gap)
-  layout.traySpan=Math.max(5.2,Math.min(8.0,pileW+0.4));   // tray ≈ pile width (don't force the horizontal fit)
-  layout.trayGap=layout.traySpan/7; layout.trayScale=layout.trayGap*0.82;   // tray tiles fit slots WITH spacing (never overlap)
-  layout.trayZ=maxZ+1.7; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // tile rests on the recessed trough floor
+  // fewer tray slots on phones (less clutter, bigger), more on desktop
+  const a=camera.aspect; SLOTS = a<0.72 ? 5 : (a<1.25 ? 6 : 7);
+  // premium tray: width tracks the pile; tiles fit slots with spacing
+  layout.traySpan=Math.max(SLOTS*0.95,Math.min(8.0,pileW+0.3));
+  layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.84;
+  layout.trayZ=maxZ+2.7; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // clear GAP from the pile; tile rests in the trough
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
@@ -369,13 +372,13 @@ function fitContent(){
   if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
 }
 function layoutTray(){ computeBounds(); }
-function trayPos(i){ const n=7,gap=layout.trayGap||0.94; return new THREE.Vector3((i-(n-1)/2)*gap, layout.trayY, layout.trayZ); }
+function trayPos(i){ const n=SLOTS,gap=layout.trayGap||0.94; return new THREE.Vector3((i-(n-1)/2)*gap, layout.trayY, layout.trayZ); }
 
 // ---------------- premium TRAY DOCK (separated from the pile) ----------------
 const trayDock=new THREE.Group(); scene.add(trayDock);
 function buildTrayDock(){
   while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
-  const n=7, gap=layout.trayGap||0.94, span=layout.traySpan||6.6, topY=layout.dockTop, z=layout.trayZ;
+  const n=SLOTS, gap=layout.trayGap||0.94, span=layout.traySpan||6.6, topY=layout.dockTop, z=layout.trayZ;
   const tileW=(layout.trayScale||0.82)*TILE;
   const baseW=span+0.55, baseD=tileW+0.95, rimH=0.24, floorTop=topY-0.18;
   // recessed FLOOR of the trough (dark) — tiles rest down inside it
@@ -416,7 +419,7 @@ function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; t.vy=0; t
 function pickTile(t){
   if(S.over || S.phase!=='play') return;
   if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
-  if(S.trayArr.length>=7) return;
+  if(S.trayArr.length>=SLOTS) return;
   t.taken=true; t.slot=S.trayArr.length; t.home.copy(trayPos(t.slot)); S.trayArr.push(t); t.state='fly'; t.vy=7.2; t.pop=0.5;
   S.history.push(t.id); sndPick(); buzz(9);
 }
@@ -430,14 +433,14 @@ function checkTray(){
   for(const t of landed) cnt[t.type]=(cnt[t.type]||0)+1;
   let mt=-1; for(const k in cnt){ if(cnt[k]>=3){ mt=+k; break; } }
   if(mt>=0){ S.busy=true; setTimeout(()=>{ S.busy=false; clearTriple(); }, 170); return; }  // let the 3rd tile rest fully in the tray first
-  if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver();
+  if(S.trayArr.length>=SLOTS && S.trayArr.every(t=>t.state==='tray')) gameOver();
   refreshHUD();
 }
 function clearTriple(){
   const landed=S.trayArr.filter(t=>t.state==='tray'); const cnt={};
   for(const t of landed) cnt[t.type]=(cnt[t.type]||0)+1;
   let mt=-1; for(const k in cnt){ if(cnt[k]>=3){ mt=+k; break; } }
-  if(mt<0){ if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver(); refreshHUD(); return; }
+  if(mt<0){ if(S.trayArr.length>=SLOTS && S.trayArr.every(t=>t.state==='tray')) gameOver(); refreshHUD(); return; }
   let need=3; const removing=[];
   S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt && t.state==='tray' && need>0){ need--; removing.push(t); return false; } return true; });
   for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position,t.type); }
