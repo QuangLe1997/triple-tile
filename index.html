@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>TRIPLE MATCH 3D — Neon Tile Puzzle</title>
-<meta name="description" content="Triple Match 3D — a glossy neon 3D tile-matching puzzle. Tap shiny 3D blocks into the tray and match 3 of a kind. Smooth effects, bloom glow, juicy mobile fun." />
+<meta name="description" content="Triple Match 3D — a glossy 3D tile-matching puzzle. Tap shiny 3D blocks into the tray and match 3 of a kind. Crisp colors, smooth effects, juicy mobile fun." />
 <meta name="theme-color" content="#0a0e15" />
 <meta property="og:type" content="website" />
 <meta property="og:title" content="TRIPLE MATCH 3D — Neon Tile Puzzle" />
@@ -144,19 +144,13 @@
 
 <script type="importmap">
 { "imports": {
-  "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
-  "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  "three": "./vendor/three.module.js"
 }}
 </script>
 
 <script type="module">
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
 
 // ---------------- palette + symbols ----------------
 // vivid claymorphism palette (bright albedo; e = accent for glow/particles)
@@ -172,6 +166,7 @@ const SYMBOLS = ['🍓','🍋','🍇','🫐','🍊','🥝','🍑','🌶️','�
 const S = {
   tiles:[], trayArr:[], score:0, best:0, level:1, undo:3, shuffle:3,
   history:[], started:false, over:false, won:false, muted:false, busy:false,
+  phase:'menu', introT:0,
 };
 function loadBest(){ try{ S.best=+localStorage.getItem('tt3d_best')||0; }catch(e){} }
 function saveBest(){ try{ localStorage.setItem('tt3d_best',S.best); }catch(e){} }
@@ -205,30 +200,24 @@ function buzz(p){ if(navigator.vibrate){ try{ navigator.vibrate(p); }catch(e){} 
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.0;
+renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.05;
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0x16213e, 0.010);
 const camera=new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) };
 
-// PBR environment for crisp clay reflections (no glare)
-const pmrem=new THREE.PMREMGenerator(renderer);
-scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
-
-// gradient backdrop (dark navy per spec)
+// gradient backdrop (dark navy per spec) — high contrast, no overlay, no haze
 (function(){ const cv=document.createElement('canvas'); cv.width=2; cv.height=256; const g=cv.getContext('2d');
-  const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#1a1a2e'); grd.addColorStop(1,'#16213e');
+  const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#1a1a2e'); grd.addColorStop(1,'#10182c');
   g.fillStyle=grd; g.fillRect(0,0,2,256); const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
 
-// lights — crisp directional key + soft fill, gentle colored rims (no blowout)
-const hemi=new THREE.HemisphereLight(0xcfe0ff,0x1a1a2e,0.35); scene.add(hemi);
-const key=new THREE.DirectionalLight(0xffffff,1.35); key.position.set(5,10,6); scene.add(key);
-const fill=new THREE.DirectionalLight(0xbcd2ff,0.35); fill.position.set(-6,4,-3); scene.add(fill);
-const p1=new THREE.PointLight(0x4ECDC4,16,30); p1.position.set(-5,4,4); scene.add(p1);
-const p2=new THREE.PointLight(0xFF6B9D,14,30); p2.position.set(6,3,2); scene.add(p2);
-const p3=new THREE.PointLight(0xFFC75F,10,30); p3.position.set(0,6,-5); scene.add(p3);
+// lights — neutral key + fill + ambient for TRUE, sharp albedo colors (no glow, no tint)
+const hemi=new THREE.HemisphereLight(0xdfe8ff,0x141a2c,0.55); scene.add(hemi);
+const amb=new THREE.AmbientLight(0xffffff,0.35); scene.add(amb);
+const key=new THREE.DirectionalLight(0xffffff,1.8); key.position.set(4,9,5); scene.add(key);
+const fill=new THREE.DirectionalLight(0xffffff,0.55); fill.position.set(-5,4,-2); scene.add(fill);
 
-// reflective floor + podium
-const floorMat=new THREE.MeshStandardMaterial({color:0x0b0f1c,metalness:0.5,roughness:0.55,envMapIntensity:0.3});
+// dark matte floor (subtle, for grounding only)
+const floorMat=new THREE.MeshStandardMaterial({color:0x0c1120,metalness:0.0,roughness:0.92});
 const floor=new THREE.Mesh(new THREE.CircleGeometry(26,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; scene.add(floor);
 // soft contact shadow under the pile (grounds it without a bright disc)
 const shadowTex=(function(){ const cv=document.createElement('canvas'); cv.width=cv.height=128; const g=cv.getContext('2d');
@@ -245,13 +234,6 @@ const motes=(function(){ const n=90,g=new THREE.BufferGeometry(),pos=new Float32
   const m=new THREE.PointsMaterial({color:0x8fe6d4,size:0.06,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending});
   const pts=new THREE.Points(g,m); scene.add(pts); return pts; })();
 
-// post-processing bloom
-let composer,bloom;
-function buildComposer(){ composer=new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene,camera));
-  bloom=new UnrealBloomPass(new THREE.Vector2(1,1),0.32,0.45,0.72);
-  composer.addPass(bloom); composer.addPass(new OutputPass()); }
-buildComposer();
 
 // ---------------- icon textures ----------------
 const iconCache={};
@@ -268,8 +250,8 @@ const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 function makeTileMesh(type){
   const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.5,metalness:0.0,
-    clearcoat:0.9,clearcoatRoughness:0.22,emissive:f.b,emissiveIntensity:0.12,envMapIntensity:0.45});
+  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.46,metalness:0.0,
+    clearcoat:1.0,clearcoatRoughness:0.16,emissive:0x000000,emissiveIntensity:0});
   const box=new THREE.Mesh(GEO,mat);
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
   icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.215;
@@ -315,7 +297,7 @@ function generate(level){
     grp.rotation.y=(Math.random()-0.5)*0.25;
     tileGroup.add(grp);
     S.tiles.push({ id:id++, type, gx:p.x, gz:p.z, layer:p.layer, taken:false, gone:false,
-      grp, home, state:'intro', vel:new THREE.Vector3(), introDelay:i*0.012, t:0, slot:-1, pop:0 });
+      grp, home, state:'wait', vel:new THREE.Vector3(), introDelay:i*0.02, t:0, slot:-1, pop:0 });
   }
   fitCamera();
 }
@@ -338,7 +320,9 @@ function fitCamera(){
   else if(aspect<0.9){ fov=47; dist=12.2; h=8.2; }
   else if(aspect<1.4){ fov=42; dist=13.4; h=8.4; lookZ=1.4; }
   else { fov=36; dist=15.0; h=8.2; lookZ=1.2; }
-  camera.fov=fov; camera.position.set(0,h,dist); camera.lookAt(0,lookY,lookZ); camera.updateProjectionMatrix();
+  camera.fov=fov; camera.updateProjectionMatrix();
+  camTarget.pos.set(0,h,dist); camTarget.look.set(0,lookY,lookZ);
+  if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
   layoutTray();
 }
 function layoutTray(){
@@ -359,7 +343,7 @@ function buildTrayDock(){
   const baseH=0.6, baseCY=topY-baseH/2;
   // glowing accent halo under the dock (premium rim)
   const halo=new THREE.Mesh(new RoundedBoxGeometry(baseW+0.5,0.14,baseD+0.5,4,0.4),
-    new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:0x4ECDC4,emissiveIntensity:1.4,roughness:0.4,metalness:0}));
+    new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:0x4ECDC4,emissiveIntensity:0.85,roughness:0.4,metalness:0}));
   halo.position.set(0,baseCY-baseH*0.42,z); trayDock.add(halo);
   // main dock slab (dark glossy clay)
   const base=new THREE.Mesh(new RoundedBoxGeometry(baseW,baseH,baseD,5,0.22),
@@ -373,51 +357,58 @@ function buildTrayDock(){
 function buildTrayFrames(){ buildTrayDock(); }
 
 // ---------------- gameplay ----------------
-function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true;
-  generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); }
+function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true; S.over=false; S.won=false;
+  generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); beginIntro(); }
 function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min(5,S.shuffle+1);
-  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); }
+  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play'; }
+
+// 3s cinematic intro: orbit/focus, THEN tiles drop in
+function beginIntro(){ S.phase='intro'; S.introT=0; for(const t of S.tiles){ t.state='wait'; t.grp.scale.setScalar(0.001); } }
+function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; } }
 
 function pickTile(t){
-  if(S.busy||S.over||!S.started) return;
+  if(S.over || S.phase!=='play') return;
   if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
   if(S.trayArr.length>=7) return;
-  t.taken=true;
-  let idx=S.trayArr.length;
-  for(let i=S.trayArr.length-1;i>=0;i--){ if(S.trayArr[i].type===t.type){ idx=i+1; break; } }
-  S.trayArr.splice(idx,0,t); t.state='fly'; t.t=0;
-  S.history.push(t.id); sndPick(); buzz(9); relayoutTray();
-  resolveTray();
+  t.taken=true; t.slot=S.trayArr.length; S.trayArr.push(t); t.state='fly'; t.t=0;
+  S.history.push(t.id); sndPick(); buzz(9);
 }
-function relayoutTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i)); if(t.state!=='fly')t.state='fly'; t.t=Math.min(t.t,0.0001); } }
 
-function resolveTray(){
-  const cnt={}; for(const t of S.trayArr) cnt[t.type]=(cnt[t.type]||0)+1;
+// called when a flying tile actually settles into its tray slot → match resolves HERE
+function onTileLanded(t){ checkTray(); }
+function landedCount(){ return S.trayArr.filter(t=>t.state==='tray').length; }
+function checkTray(){
+  const landed=S.trayArr.filter(t=>t.state==='tray'); const cnt={};
+  for(const t of landed) cnt[t.type]=(cnt[t.type]||0)+1;
   let mt=-1; for(const k in cnt){ if(cnt[k]>=3){ mt=+k; break; } }
-  if(mt<0){ afterResolve(); return; }
-  S.busy=true; const removing=[]; let need=3;
-  S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt&&need>0){ need--; removing.push(t); return false; } return true; });
-  for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position, t.type); }
-  S.score+=30; S.history=[]; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.5); shake(0.5);
-  relayoutTray();
-  setTimeout(()=>{ S.busy=false; afterResolve(); }, 360);
+  if(mt>=0){
+    let need=3; const removing=[];
+    S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt && t.state==='tray' && need>0){ need--; removing.push(t); return false; } return true; });
+    for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position,t.type); }
+    S.score+=30; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.3); shake(0.55);
+    reindexTray(); refreshHUD();
+    if(!S.tiles.some(x=>!x.taken&&!x.gone) && S.trayArr.length===0){ S.won=true; winLevel(); }
+    return;
+  }
+  // no triple yet → lose only when all 7 slots are filled AND every tile has landed
+  if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver();
+  refreshHUD();
 }
-function afterResolve(){ refreshHUD();
-  const remain=S.tiles.some(t=>!t.taken&&!t.gone);
-  if(!remain && S.trayArr.length===0){ S.won=true; winLevel(); return; }
-  if(S.trayArr.length>=7){ gameOver(); }
-}
+// shift remaining tray tiles to slots 0..n-1 (landed ones slide via a quick re-fly)
+function reindexTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i));
+  if(t.state==='tray'){ t.state='fly'; t.t=0; } } }
+
 function winLevel(){ S.score+=100+S.level*20; if(S.score>S.best){ S.best=S.score; saveBest(); }
-  refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti(); setTimeout(()=>showResult(true),650); }
-function gameOver(){ S.over=true; if(S.score>S.best){ S.best=S.score; saveBest(); }
+  refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti(); setTimeout(()=>showResult(true),700); }
+function gameOver(){ if(S.over) return; S.over=true; if(S.score>S.best){ S.best=S.score; saveBest(); }
   refreshHUD(); sndOver(); buzz([0,80,40,120]); shake(1.2); setTimeout(()=>showResult(false),450); }
 
-function doUndo(){ if(S.busy||S.over||S.undo<=0||S.history.length===0) return;
+function doUndo(){ if(S.over||S.phase!=='play'||S.undo<=0||S.history.length===0) return;
   const id=S.history.pop(); const idx=S.trayArr.findIndex(t=>t.id===id); if(idx<0)return;
-  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.t=0; S.undo--; sndPick(); relayoutTray(); refreshHUD(); }
-function doShuffle(){ if(S.busy||S.over||S.shuffle<=0) return;
+  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.t=0; S.undo--; sndPick(); reindexTray(); refreshHUD(); }
+function doShuffle(){ if(S.over||S.phase!=='play'||S.shuffle<=0) return;
   const live=S.tiles.filter(t=>!t.taken&&!t.gone); const types=shuffleArr(live.map(t=>t.type));
-  live.forEach((t,i)=>{ t.type=types[i]; const f=FACES[t.type%FACES.length]; t.grp.userData.mat.color.setHex(f.b); t.grp.userData.mat.emissive.setHex(f.e);
+  live.forEach((t,i)=>{ t.type=types[i]; const f=FACES[t.type%FACES.length]; t.grp.userData.mat.color.setHex(f.b);
     t.grp.userData.icon.material.map=iconTexture(t.type); t.grp.userData.icon.material.needsUpdate=true; t.pop=0.7; });
   S.shuffle--; beep(320,0.12,'triangle',0.16,540); refreshHUD(); }
 
@@ -479,7 +470,7 @@ muteBtn.addEventListener('click',()=>{ S.muted=!S.muted; drawMute(); if(S.muted)
 let W=1,H=1;
 function resize(){ W=window.innerWidth; H=window.innerHeight; const dpr=Math.min(2,window.devicePixelRatio||1);
   renderer.setPixelRatio(dpr); renderer.setSize(W,H,false); camera.aspect=W/H; camera.updateProjectionMatrix();
-  composer.setPixelRatio(dpr); composer.setSize(W,H); bloom.setSize(W,H); fitCamera(); }
+  fitCamera(); }
 window.addEventListener('resize',resize);
 window.addEventListener('orientationchange',()=>setTimeout(resize,200));
 
@@ -490,29 +481,35 @@ function animate(){
   const dt=Math.min(0.05,clock.getDelta()); const tnow=clock.elapsedTime;
   // tiles
   for(let i=S.tiles.length-1;i>=0;i--){ const t=S.tiles[i]; const g=t.grp;
-    if(t.state==='intro'){ t.t+=dt; if(t.t>t.introDelay){ g.position.y=ease(g.position.y,t.home.y,0.18); g.position.x=ease(g.position.x,t.home.x,0.2); g.position.z=ease(g.position.z,t.home.z,0.2);
-        const s=ease(g.scale.x,1,0.2); g.scale.setScalar(s); if(Math.abs(g.position.y-t.home.y)<0.01&&s>0.99){ t.state='board'; g.position.copy(t.home); g.scale.setScalar(1);} } }
-    else if(t.state==='board'){ const free=isFree(t); const mat=g.userData.mat;
-        mat.emissiveIntensity=ease(mat.emissiveIntensity, free?0.26:0.05, 0.12);
-        const ty=t.home.y + (free?Math.sin(tnow*2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
+    if(t.state==='wait'){ /* held off-stage until the intro finishes */ }
+    else if(t.state==='intro'){ t.t+=dt; if(t.t>t.introDelay){ g.position.y=ease(g.position.y,t.home.y,0.2); g.position.x=ease(g.position.x,t.home.x,0.22); g.position.z=ease(g.position.z,t.home.z,0.22);
+        const s=ease(g.scale.x,1,0.24); g.scale.setScalar(s); if(Math.abs(g.position.y-t.home.y)<0.01&&s>0.99){ t.state='board'; g.position.copy(t.home); g.scale.setScalar(1);} } }
+    else if(t.state==='board'){ const free=isFree(t);
+        const ty=t.home.y + (free?Math.sin(tnow*2.2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
         if(t.pop>0){ const s=1+0.12*t.pop; g.scale.setScalar(s); t.pop*=0.86; if(t.pop<0.02){t.pop=0;g.scale.setScalar(1);} } }
-    else if(t.state==='fly'||t.state==='return'){ t.t+=dt*2.6; const k=Math.min(1,t.t);
-        g.position.lerp(t.home, 0.25); g.scale.setScalar(ease(g.scale.x, t.state==='return'?1:0.86, 0.2));
-        g.rotation.y=ease(g.rotation.y,0,0.2); g.userData.mat.emissiveIntensity=ease(g.userData.mat.emissiveIntensity,0.18,0.15);
-        if(g.position.distanceTo(t.home)<0.02){ g.position.copy(t.home); t.state=(t.state==='return')?'board':'tray'; } }
-    else if(t.state==='tray'){ const i7=t.slot; const tp=trayPos(i7); t.home.copy(tp); g.position.lerp(tp,0.25);
-        g.position.y=tp.y+Math.sin(tnow*3+i7)*0.02; }
-    else if(t.state==='pop'){ t.t+=dt*3; const s=Math.max(0.001,1.3-t.t*1.6); g.scale.setScalar(s); g.position.y+=dt*1.5; g.rotation.y+=dt*6;
-        g.userData.mat.emissiveIntensity=2.2; if(t.t>=1){ t.gone=true; tileGroup.remove(g); S.tiles.splice(i,1); } }
+    else if(t.state==='fly'||t.state==='return'){ g.position.lerp(t.home,0.28); g.scale.setScalar(ease(g.scale.x, t.state==='return'?1:0.9, 0.22)); g.rotation.y=ease(g.rotation.y,0,0.22);
+        if(g.position.distanceTo(t.home)<0.03){ g.position.copy(t.home); const wasReturn=(t.state==='return'); t.state=wasReturn?'board':'tray'; if(!wasReturn) onTileLanded(t); } }
+    else if(t.state==='tray'){ const tp=trayPos(t.slot); t.home.copy(tp); g.position.lerp(tp,0.25); g.position.y=tp.y+Math.sin(tnow*3+t.slot)*0.02; }
+    else if(t.state==='pop'){ t.t+=dt*3; const s=Math.max(0.001,1.35-t.t*1.7); g.scale.setScalar(s); g.position.y+=dt*1.6; g.rotation.y+=dt*7;
+        if(t.t>=1){ t.gone=true; tileGroup.remove(g); S.tiles.splice(i,1); } }
   }
   // motes drift
   motes.rotation.y += dt*0.02; motes.position.y = Math.sin(tnow*0.3)*0.3;
-  // camera shake
-  if(shakeAmt>0){ camera.position.x += (Math.random()-0.5)*shakeAmt*0.12; camera.position.y += (Math.random()-0.5)*shakeAmt*0.1; shakeAmt*=0.86; if(shakeAmt<0.02)shakeAmt=0; }
-  // gentle light pulse
-  p1.intensity=120+Math.sin(tnow*1.3)*30; p2.intensity=110+Math.cos(tnow*1.1)*30;
+  // camera: cinematic intro orbit → anchored play view (+ shake)
+  if(S.phase==='intro'){
+    S.introT+=dt; const dur=3.0; let e=Math.min(1,S.introT/dur); e=e<0.5?2*e*e:1-Math.pow(-2*e+2,2)/2;
+    const look=camTarget.look, base=camTarget.pos.clone().sub(look);
+    const ang=(1-e)*Math.PI*1.15, lift=(1-e)*4.5, out=1+(1-e)*0.55;
+    const cx=base.x*Math.cos(ang)-base.z*Math.sin(ang), cz=base.x*Math.sin(ang)+base.z*Math.cos(ang);
+    camera.position.set(look.x+cx*out, look.y+base.y*out+lift, look.z+cz*out); camera.lookAt(look);
+    if(S.introT>=dur){ S.phase='play'; camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); dropTiles(); }
+  } else {
+    camera.position.copy(camTarget.pos);
+    if(shakeAmt>0){ camera.position.x+=(Math.random()-0.5)*shakeAmt*0.12; camera.position.y+=(Math.random()-0.5)*shakeAmt*0.1; shakeAmt*=0.86; if(shakeAmt<0.02)shakeAmt=0; }
+    camera.lookAt(camTarget.look);
+  }
   updateParts(dt);
-  composer.render();
+  renderer.render(scene,camera);
   requestAnimationFrame(animate);
 }
 
