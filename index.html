@@ -297,9 +297,9 @@ function generate(level){
     grp.rotation.y=(Math.random()-0.5)*0.25;
     tileGroup.add(grp);
     S.tiles.push({ id:id++, type, gx:p.x, gz:p.z, layer:p.layer, taken:false, gone:false,
-      grp, home, state:'wait', vel:new THREE.Vector3(), introDelay:i*0.02, t:0, slot:-1, pop:0 });
+      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, introDelay:i*0.02, t:0, slot:-1, pop:0 });
   }
-  fitCamera();
+  computeBounds(); fitContent();
 }
 
 // a tile is free if no higher-layer live tile overlaps its footprint
@@ -310,29 +310,38 @@ function isFree(t){
   return true;
 }
 
-// ---------------- camera framing ----------------
-function fitCamera(){
-  const aspect=camera.aspect;
-  // portrait-first framing: pile fills the upper view, premium tray dock anchors the bottom
-  let dist, h, fov, lookY=0.0, lookZ=1.7;
-  if(aspect<0.5){ fov=54; dist=12.6; h=8.2; }
-  else if(aspect<0.62){ fov=51; dist=12.4; h=8.2; }
-  else if(aspect<0.9){ fov=47; dist=12.2; h=8.2; }
-  else if(aspect<1.4){ fov=42; dist=13.4; h=8.4; lookZ=1.4; }
-  else { fov=36; dist=15.0; h=8.2; lookZ=1.2; }
-  camera.fov=fov; camera.updateProjectionMatrix();
-  camTarget.pos.set(0,h,dist); camTarget.look.set(0,lookY,lookZ);
-  if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
-  layoutTray();
-}
-function layoutTray(){
-  const n=7; const span=aspectSpan(); layout.traySpan=span; const gap=span/n;
-  layout.trayGap=gap; layout.trayZ=4.4; layout.trayY=0.18; layout.dockTop=layout.trayY - TILE*0.21;
+// ---------------- camera framing (scientific auto-fit) ----------------
+// The WORLD layout is device-independent; the camera distance is solved so the
+// whole play content fits any screen/aspect with comfortable margins.
+const FIT_DIR=new THREE.Vector3(0,1.25,1).normalize();   // steeper top-down pitch (compact, clean)
+function computeBounds(){
+  let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9;
+  for(const t of S.tiles){ if(t.gone)continue; minX=Math.min(minX,t.home.x);maxX=Math.max(maxX,t.home.x);minZ=Math.min(minZ,t.home.z);maxZ=Math.max(maxZ,t.home.z); }
+  if(!isFinite(minX)){ minX=-2.5;maxX=2.5;minZ=-2.5;maxZ=1.5; }
+  const pileW=maxX-minX;
+  // premium tray: width adapts to the pile, placed in front of it
+  layout.traySpan=Math.max(6.0,Math.min(7.6,pileW+1.4));
+  layout.trayGap=layout.traySpan/7; layout.trayZ=maxZ+1.7; layout.trayY=0.18; layout.dockTop=layout.trayY-TILE*0.21;
   buildTrayDock();
-  for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; const tp=trayPos(i); t.home.copy(tp); }
+  for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
+  // content bounds = pile ∪ tray dock (padded by a tile)
+  const tw=layout.traySpan/2+0.5;
+  layout.cMinX=Math.min(minX-0.7,-tw); layout.cMaxX=Math.max(maxX+0.7,tw);
+  layout.cMinZ=minZ-0.8; layout.cMaxZ=layout.trayZ+layout.trayGap/2+0.7;
 }
-function aspectSpan(){ const a=camera.aspect; return a<0.5 ? 6.0 : (a<0.7 ? 6.4 : (a<1 ? 6.8 : 7.2)); }
-function trayPos(i){ const n=7,gap=layout.trayGap||0.94; const x=(i-(n-1)/2)*gap; return new THREE.Vector3(x,layout.trayY,layout.trayZ); }
+function fitContent(){
+  const a=camera.aspect, cl=THREE.MathUtils.clamp;
+  // continuous framing (smooth across every device aspect) — pile upper, tray lower
+  let fov,h,dist,lookZ;
+  if(a<=0.62){ const t=cl((0.62-a)/0.20,0,1); fov=51+4*t; dist=12.4+0.5*t; h=8.2; lookZ=1.7; }       // tall portrait
+  else if(a<=1.0){ const t=(a-0.62)/0.38; fov=51-4*t; dist=12.4+1.1*t; h=8.2+0.2*t; lookZ=1.7-0.35*t; } // square-ish
+  else { const t=cl((a-1.0)/0.9,0,1); fov=47-11*t; dist=13.5+1.6*t; h=8.4; lookZ=1.35-0.25*t; }        // landscape
+  camera.fov=fov; camera.updateProjectionMatrix();
+  camTarget.pos.set(0,h,dist); camTarget.look.set(0,0,lookZ);
+  if(S.phase!=='intro'){ camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
+}
+function layoutTray(){ computeBounds(); }
+function trayPos(i){ const n=7,gap=layout.trayGap||0.94; return new THREE.Vector3((i-(n-1)/2)*gap, layout.trayY, layout.trayZ); }
 
 // ---------------- premium TRAY DOCK (separated from the pile) ----------------
 const trayDock=new THREE.Group(); scene.add(trayDock);
@@ -364,13 +373,13 @@ function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min
 
 // 3s cinematic intro: orbit/focus, THEN tiles drop in
 function beginIntro(){ S.phase='intro'; S.introT=0; for(const t of S.tiles){ t.state='wait'; t.grp.scale.setScalar(0.001); } }
-function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; } }
+function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; t.vy=0; t.bounces=0; t.dropping=false; t.squash=0; } }
 
 function pickTile(t){
   if(S.over || S.phase!=='play') return;
   if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
   if(S.trayArr.length>=7) return;
-  t.taken=true; t.slot=S.trayArr.length; S.trayArr.push(t); t.state='fly'; t.t=0;
+  t.taken=true; t.slot=S.trayArr.length; S.trayArr.push(t); t.state='fly'; t.vy=7.2; t.pop=0.5;
   S.history.push(t.id); sndPick(); buzz(9);
 }
 
@@ -394,9 +403,9 @@ function checkTray(){
   if(S.trayArr.length>=7 && S.trayArr.every(t=>t.state==='tray')) gameOver();
   refreshHUD();
 }
-// shift remaining tray tiles to slots 0..n-1 (landed ones slide via a quick re-fly)
+// shift remaining tray tiles to slots 0..n-1 (landed ones hop to the new slot)
 function reindexTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i));
-  if(t.state==='tray'){ t.state='fly'; t.t=0; } } }
+  if(t.state==='tray'){ t.state='fly'; t.vy=2.6; } } }
 
 function winLevel(){ S.score+=100+S.level*20; if(S.score>S.best){ S.best=S.score; saveBest(); }
   refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti(); setTimeout(()=>showResult(true),700); }
@@ -405,16 +414,21 @@ function gameOver(){ if(S.over) return; S.over=true; if(S.score>S.best){ S.best=
 
 function doUndo(){ if(S.over||S.phase!=='play'||S.undo<=0||S.history.length===0) return;
   const id=S.history.pop(); const idx=S.trayArr.findIndex(t=>t.id===id); if(idx<0)return;
-  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.t=0; S.undo--; sndPick(); reindexTray(); refreshHUD(); }
+  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.vy=6; S.undo--; sndPick(); reindexTray(); refreshHUD(); }
 function doShuffle(){ if(S.over||S.phase!=='play'||S.shuffle<=0) return;
   const live=S.tiles.filter(t=>!t.taken&&!t.gone); const types=shuffleArr(live.map(t=>t.type));
   live.forEach((t,i)=>{ t.type=types[i]; const f=FACES[t.type%FACES.length]; t.grp.userData.mat.color.setHex(f.b);
     t.grp.userData.icon.material.map=iconTexture(t.type); t.grp.userData.icon.material.needsUpdate=true; t.pop=0.7; });
   S.shuffle--; beep(320,0.12,'triangle',0.16,540); refreshHUD(); }
 
-// ---------------- particles ----------------
+// ---------------- physics + particles ----------------
+const GRAVITY=30;                 // units/s^2 — realistic fall acceleration
+function setScaleSquash(g,base,sq){ const sy=base*(1-0.34*sq), sxz=base*(1+0.22*sq); g.scale.set(sxz,sy,sxz); }
 const PGEO=new THREE.IcosahedronGeometry(0.09,0); const pPool=[]; const pLive=[];
 function getP(){ let m=pPool.pop(); if(!m){ m=new THREE.Mesh(PGEO,new THREE.MeshBasicMaterial({color:0xffffff})); scene.add(m); } m.visible=true; return m; }
+function spawnDust(pos,amt){ const n=Math.round(4+amt*7); for(let i=0;i<n;i++){ const m=getP();
+  m.material.color.setHex(0xcfe9ff); m.position.set(pos.x+(Math.random()-0.5)*0.5,pos.y+0.04,pos.z+(Math.random()-0.5)*0.5);
+  const a=Math.random()*6.28, sp=0.6+Math.random()*1.6*amt; pLive.push({m,vx:Math.cos(a)*sp,vy:0.4+Math.random()*1.2,vz:Math.sin(a)*sp,life:0.45,sc:0.6}); } }
 function burst(pos,type){ const e=FACES[type%FACES.length].e; for(let i=0;i<14;i++){ const m=getP();
   m.material.color.setHex(Math.random()<0.5?e:0xffffff); m.position.copy(pos);
   const a=Math.random()*6.28, sp=2+Math.random()*4; pLive.push({m,vx:Math.cos(a)*sp,vy:2+Math.random()*4,vz:Math.sin(a)*sp,life:1,sc:1}); } }
@@ -470,7 +484,7 @@ muteBtn.addEventListener('click',()=>{ S.muted=!S.muted; drawMute(); if(S.muted)
 let W=1,H=1;
 function resize(){ W=window.innerWidth; H=window.innerHeight; const dpr=Math.min(2,window.devicePixelRatio||1);
   renderer.setPixelRatio(dpr); renderer.setSize(W,H,false); camera.aspect=W/H; camera.updateProjectionMatrix();
-  fitCamera(); }
+  computeBounds(); fitContent(); }
 window.addEventListener('resize',resize);
 window.addEventListener('orientationchange',()=>setTimeout(resize,200));
 
@@ -481,15 +495,40 @@ function animate(){
   const dt=Math.min(0.05,clock.getDelta()); const tnow=clock.elapsedTime;
   // tiles
   for(let i=S.tiles.length-1;i>=0;i--){ const t=S.tiles[i]; const g=t.grp;
+    if(t.squash>0){ t.squash=Math.max(0, t.squash - dt*5.5); }   // squash recovery
     if(t.state==='wait'){ /* held off-stage until the intro finishes */ }
-    else if(t.state==='intro'){ t.t+=dt; if(t.t>t.introDelay){ g.position.y=ease(g.position.y,t.home.y,0.2); g.position.x=ease(g.position.x,t.home.x,0.22); g.position.z=ease(g.position.z,t.home.z,0.22);
-        const s=ease(g.scale.x,1,0.24); g.scale.setScalar(s); if(Math.abs(g.position.y-t.home.y)<0.01&&s>0.99){ t.state='board'; g.position.copy(t.home); g.scale.setScalar(1);} } }
+    else if(t.state==='intro'){
+      t.t+=dt;
+      if(t.t>=t.introDelay){
+        if(!t.dropping){ t.dropping=true; g.position.set(t.home.x,t.home.y+6.5,t.home.z); g.scale.setScalar(1); t.vy=0; }
+        t.vy-=GRAVITY*dt; g.position.y+=t.vy*dt;
+        if(g.position.y<=t.home.y){ g.position.y=t.home.y; const imp=Math.min(1,-t.vy/12);
+          if(-t.vy>2.4 && (t.bounces|0)<1){ t.bounces=(t.bounces|0)+1; t.vy=-t.vy*0.34; t.squash=Math.max(t.squash,imp*0.7); }
+          else { t.vy=0; t.state='board'; t.squash=Math.max(t.squash,imp); if(imp>0.3){ shake(imp*0.35); buzz(Math.round(imp*16)); spawnDust(g.position,imp); } }
+        }
+        // stretch while falling fast, then squash on land
+        const stretch=t.vy<0?Math.min(0.18,-t.vy*0.012):0; g.scale.set((1-stretch*0.5)*(1+0.22*t.squash),(1+stretch)*(1-0.34*t.squash),(1-stretch*0.5)*(1+0.22*t.squash));
+      }
+    }
     else if(t.state==='board'){ const free=isFree(t);
-        const ty=t.home.y + (free?Math.sin(tnow*2.2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
-        if(t.pop>0){ const s=1+0.12*t.pop; g.scale.setScalar(s); t.pop*=0.86; if(t.pop<0.02){t.pop=0;g.scale.setScalar(1);} } }
-    else if(t.state==='fly'||t.state==='return'){ g.position.lerp(t.home,0.28); g.scale.setScalar(ease(g.scale.x, t.state==='return'?1:0.9, 0.22)); g.rotation.y=ease(g.rotation.y,0,0.22);
-        if(g.position.distanceTo(t.home)<0.03){ g.position.copy(t.home); const wasReturn=(t.state==='return'); t.state=wasReturn?'board':'tray'; if(!wasReturn) onTileLanded(t); } }
-    else if(t.state==='tray'){ const tp=trayPos(t.slot); t.home.copy(tp); g.position.lerp(tp,0.25); g.position.y=tp.y+Math.sin(tnow*3+t.slot)*0.02; }
+        const ty=t.home.y+(free?Math.sin(tnow*2.2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
+        let base=1; if(t.pop>0){ base=1+0.12*t.pop; t.pop*=0.86; if(t.pop<0.02)t.pop=0; }
+        setScaleSquash(g,base,t.squash); }
+    else if(t.state==='fly'||t.state==='return'){
+        g.position.x=ease(g.position.x,t.home.x,0.26); g.position.z=ease(g.position.z,t.home.z,0.26);
+        t.vy-=GRAVITY*dt; g.position.y+=t.vy*dt;
+        const dxz=Math.hypot(g.position.x-t.home.x,g.position.z-t.home.z);
+        if(g.position.y<=t.home.y){ g.position.y=t.home.y;
+          if(dxz<0.1){ const imp=Math.min(1,-t.vy/12); t.vy=0; const wasReturn=(t.state==='return'); t.state=wasReturn?'board':'tray';
+            t.squash=Math.max(t.squash,Math.max(0.4,imp)); shake(0.3); buzz(16); spawnDust(g.position,0.8); if(!wasReturn) onTileLanded(t); }
+          else { t.vy=0; }
+        }
+        const stretch=t.vy>0?Math.min(0.25,t.vy*0.03):0;
+        g.scale.set((1-stretch*0.6)*(1+0.22*t.squash),(1+stretch)*(1-0.34*t.squash),(1-stretch*0.6)*(1+0.22*t.squash));
+        g.rotation.y=ease(g.rotation.y,0,0.22); }
+    else if(t.state==='tray'){ const tp=trayPos(t.slot); t.home.copy(tp);
+        g.position.x=ease(g.position.x,tp.x,0.25); g.position.z=ease(g.position.z,tp.z,0.25);
+        g.position.y=ease(g.position.y, tp.y+Math.sin(tnow*3+t.slot)*0.02, 0.3); setScaleSquash(g,1,t.squash); }
     else if(t.state==='pop'){ t.t+=dt*3; const s=Math.max(0.001,1.35-t.t*1.7); g.scale.setScalar(s); g.position.y+=dt*1.6; g.rotation.y+=dt*7;
         if(t.t>=1){ t.gone=true; tileGroup.remove(g); S.tiles.splice(i,1); } }
   }
