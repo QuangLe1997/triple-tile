@@ -156,13 +156,15 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ---------------- palette + symbols ----------------
+// vivid claymorphism palette (bright albedo; e = accent for glow/particles)
 const FACES = [
-  {b:0x123a31,e:0x54d6b2}, {b:0x3a2f12,e:0xe7c06a}, {b:0x3a1f2a,e:0xe493ac},
-  {b:0x18233f,e:0x7aa8ff}, {b:0x271a3a,e:0xb48cff}, {b:0x123a32,e:0x7fe0c0},
-  {b:0x3a2716,e:0xffb27a}, {b:0x213a16,e:0x9be37a}, {b:0x3a1622,e:0xff8fa3},
-  {b:0x16323a,e:0x6ad0e0}, {b:0x3a3216,e:0xffd86a}, {b:0x2a1f3a,e:0xc0a0ff},
+  {b:0x4ECDC4,e:0x6ff0e6}, {b:0xFF6B9D,e:0xff8fb6}, {b:0xFFC75F,e:0xffd98a},
+  {b:0x5BC8FF,e:0x8adcff}, {b:0xB48CFF,e:0xcdb0ff}, {b:0x6BE3B8,e:0x9af0d2},
+  {b:0xFF8A5B,e:0xffae88}, {b:0x9BE36A,e:0xbdf094}, {b:0xFF7AA8,e:0xffa1c4},
+  {b:0x57E0E0,e:0x8af0f0}, {b:0xFFD23F,e:0xffe27a}, {b:0xC9A8FF,e:0xdcc6ff},
 ];
 const SYMBOLS = ['🍓','🍋','🍇','🫐','🍊','🥝','🍑','🌶️','🥥','🔔','⭐','💎','🍀','🌸','🎈','🍪'];
 
@@ -201,28 +203,33 @@ const sndOver =()=>{ beep(400,0.5,'sawtooth',0.3,80); setTimeout(()=>beep(200,0.
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.0;
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0x070a11, 0.028);
+scene.fog=new THREE.FogExp2(0x16213e, 0.010);
 const camera=new THREE.PerspectiveCamera(48, 1, 0.1, 100);
 
-// gradient backdrop
+// PBR environment for crisp clay reflections (no glare)
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+// gradient backdrop (dark navy per spec)
 (function(){ const cv=document.createElement('canvas'); cv.width=2; cv.height=256; const g=cv.getContext('2d');
-  const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#141d33'); grd.addColorStop(0.5,'#0c1120'); grd.addColorStop(1,'#070a11');
+  const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#1a1a2e'); grd.addColorStop(1,'#16213e');
   g.fillStyle=grd; g.fillRect(0,0,2,256); const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
 
-// lights
-const hemi=new THREE.HemisphereLight(0xbfd0ff,0x202028,0.65); scene.add(hemi);
-const key=new THREE.DirectionalLight(0xffffff,1.15); key.position.set(4,9,6); scene.add(key);
-const p1=new THREE.PointLight(0x54d6b2,140,40); p1.position.set(-6,5,4); scene.add(p1);
-const p2=new THREE.PointLight(0xe493ac,120,40); p2.position.set(6,4,2); scene.add(p2);
-const p3=new THREE.PointLight(0xe7c06a,90,40); p3.position.set(0,6,-6); scene.add(p3);
+// lights — crisp directional key + soft fill, gentle colored rims (no blowout)
+const hemi=new THREE.HemisphereLight(0xcfe0ff,0x1a1a2e,0.35); scene.add(hemi);
+const key=new THREE.DirectionalLight(0xffffff,1.35); key.position.set(5,10,6); scene.add(key);
+const fill=new THREE.DirectionalLight(0xbcd2ff,0.35); fill.position.set(-6,4,-3); scene.add(fill);
+const p1=new THREE.PointLight(0x4ECDC4,16,30); p1.position.set(-5,4,4); scene.add(p1);
+const p2=new THREE.PointLight(0xFF6B9D,14,30); p2.position.set(6,3,2); scene.add(p2);
+const p3=new THREE.PointLight(0xFFC75F,10,30); p3.position.set(0,6,-5); scene.add(p3);
 
 // reflective floor + podium
-const floorMat=new THREE.MeshStandardMaterial({color:0x0a0e16,metalness:0.85,roughness:0.34});
-const floor=new THREE.Mesh(new THREE.CircleGeometry(22,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; scene.add(floor);
-const podium=new THREE.Mesh(new THREE.CylinderGeometry(5.4,5.8,0.5,64),
-  new THREE.MeshStandardMaterial({color:0x111726,metalness:0.6,roughness:0.4,emissive:0x10202c,emissiveIntensity:0.4}));
+const floorMat=new THREE.MeshStandardMaterial({color:0x0b0f1c,metalness:0.5,roughness:0.55,envMapIntensity:0.3});
+const floor=new THREE.Mesh(new THREE.CircleGeometry(26,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; scene.add(floor);
+const podium=new THREE.Mesh(new THREE.CylinderGeometry(6.6,7.0,0.5,72),
+  new THREE.MeshPhysicalMaterial({color:0x161d36,metalness:0.0,roughness:0.62,clearcoat:0.35,clearcoatRoughness:0.4,envMapIntensity:0.25}));
 podium.position.y=-0.55; scene.add(podium);
 
 // ambient floaty motes
@@ -236,7 +243,7 @@ const motes=(function(){ const n=90,g=new THREE.BufferGeometry(),pos=new Float32
 let composer,bloom;
 function buildComposer(){ composer=new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
-  bloom=new UnrealBloomPass(new THREE.Vector2(1,1),0.72,0.6,0.24);
+  bloom=new UnrealBloomPass(new THREE.Vector2(1,1),0.32,0.45,0.72);
   composer.addPass(bloom); composer.addPass(new OutputPass()); }
 buildComposer();
 
@@ -255,17 +262,18 @@ const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 function makeTileMesh(type){
   const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshStandardMaterial({color:f.b,emissive:f.e,emissiveIntensity:0.55,metalness:0.45,roughness:0.3});
+  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.5,metalness:0.0,
+    clearcoat:0.9,clearcoatRoughness:0.22,emissive:f.b,emissiveIntensity:0.12,envMapIntensity:0.45});
   const box=new THREE.Mesh(GEO,mat);
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
   icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.215;
   const grp=new THREE.Group(); grp.add(box); grp.add(icon);
-  grp.userData={mat,box,icon,baseEmissive:0.55};
+  grp.userData={mat,box,icon,baseEmissive:0.08};
   return grp;
 }
 
 // ---------------- layout / generation ----------------
-let layout={ originX:0, originZ:0, step:1.12, trayY:0.35, trayZ:0, traySpan:0 };
+let layout={ originX:0, originZ:0, step:1.42, trayY:0.35, trayZ:0, traySpan:0 };
 
 function rnd(n){ return Math.floor(Math.random()*n); }
 function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -285,7 +293,7 @@ function generate(level){
     const offZ=-(rows-1)*step/2 + (L%2)*step*0.5;
     for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
       if(L>0 && Math.random()<0.14) continue;
-      positions.push({ x:offX+c*step + (Math.random()-0.5)*0.04, z:offZ+r*step + (Math.random()-0.5)*0.04, layer:L });
+      positions.push({ x:offX+c*step + (Math.random()-0.5)*0.04, z:offZ+r*step - 1.3 + (Math.random()-0.5)*0.04, layer:L });
     }
   }
   shuffleArr(positions);
@@ -317,17 +325,17 @@ function isFree(t){
 // ---------------- camera framing ----------------
 function fitCamera(){
   const aspect=camera.aspect;
-  let dist, h, fov, lookY=0.5, lookZ=1.1;
-  if(aspect<0.62){ fov=54; dist=9.8; h=7.6; }
-  else if(aspect<0.9){ fov=49; dist=9.6; h=7.6; }
-  else if(aspect<1.4){ fov=43; dist=10.4; h=7.6; }
-  else { fov=37; dist=11.6; h=7.4; }
+  let dist, h, fov, lookY=0.4, lookZ=0.0;
+  if(aspect<0.62){ fov=52; dist=12.2; h=9.2; }
+  else if(aspect<0.9){ fov=48; dist=12.0; h=9.2; }
+  else if(aspect<1.4){ fov=42; dist=13.0; h=9.0; }
+  else { fov=36; dist=14.6; h=8.8; }
   camera.fov=fov; camera.position.set(0,h,dist); camera.lookAt(0,lookY,lookZ); camera.updateProjectionMatrix();
   layoutTray();
 }
 function layoutTray(){
   const n=7; const span=aspectSpan(); layout.traySpan=span; const gap=span/n;
-  layout.trayGap=gap; layout.trayZ=3.0; layout.trayY=0.3;
+  layout.trayGap=gap; layout.trayZ=4.4; layout.trayY=0.3;
   for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; const tp=trayPos(i); t.home.copy(tp); }
 }
 function aspectSpan(){ const a=camera.aspect; return a<0.7 ? 6.2 : (a<1 ? 6.6 : 7.0); }
@@ -464,12 +472,12 @@ function animate(){
     if(t.state==='intro'){ t.t+=dt; if(t.t>t.introDelay){ g.position.y=ease(g.position.y,t.home.y,0.18); g.position.x=ease(g.position.x,t.home.x,0.2); g.position.z=ease(g.position.z,t.home.z,0.2);
         const s=ease(g.scale.x,1,0.2); g.scale.setScalar(s); if(Math.abs(g.position.y-t.home.y)<0.01&&s>0.99){ t.state='board'; g.position.copy(t.home); g.scale.setScalar(1);} } }
     else if(t.state==='board'){ const free=isFree(t); const mat=g.userData.mat;
-        mat.emissiveIntensity=ease(mat.emissiveIntensity, free?0.95:0.32, 0.12);
-        const ty=t.home.y + (free?Math.sin(tnow*2+t.gx+t.gz)*0.04:0); g.position.y=ease(g.position.y,ty,0.2);
+        mat.emissiveIntensity=ease(mat.emissiveIntensity, free?0.26:0.05, 0.12);
+        const ty=t.home.y + (free?Math.sin(tnow*2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
         if(t.pop>0){ const s=1+0.12*t.pop; g.scale.setScalar(s); t.pop*=0.86; if(t.pop<0.02){t.pop=0;g.scale.setScalar(1);} } }
     else if(t.state==='fly'||t.state==='return'){ t.t+=dt*2.6; const k=Math.min(1,t.t);
         g.position.lerp(t.home, 0.25); g.scale.setScalar(ease(g.scale.x, t.state==='return'?1:0.86, 0.2));
-        g.rotation.y=ease(g.rotation.y,0,0.2); g.userData.mat.emissiveIntensity=ease(g.userData.mat.emissiveIntensity,0.8,0.15);
+        g.rotation.y=ease(g.rotation.y,0,0.2); g.userData.mat.emissiveIntensity=ease(g.userData.mat.emissiveIntensity,0.18,0.15);
         if(g.position.distanceTo(t.home)<0.02){ g.position.copy(t.home); t.state=(t.state==='return')?'board':'tray'; } }
     else if(t.state==='tray'){ const i7=t.slot; const tp=trayPos(i7); t.home.copy(tp); g.position.lerp(tp,0.25);
         g.position.y=tp.y+Math.sin(tnow*3+i7)*0.02; }
