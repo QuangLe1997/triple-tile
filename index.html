@@ -220,7 +220,7 @@ function buzz(p){ if(navigator.vibrate){ try{ navigator.vibrate(p); }catch(e){} 
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.18;
+renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.24;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;   // real cast shadows → clear physical stacking
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(48, 1, 0.1, 100);
@@ -283,9 +283,10 @@ const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 function makeTileMesh(type){
   const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.26,metalness:0.0,
-    clearcoat:1.0,clearcoatRoughness:0.05,sheen:0.5,sheenRoughness:0.35,sheenColor:new THREE.Color(0xffffff),
-    specularIntensity:1.0,envMapIntensity:1.0,emissive:f.b,emissiveIntensity:0.06});   // polished, premium, vivid
+  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.22,metalness:0.0,
+    clearcoat:1.0,clearcoatRoughness:0.04,sheen:0.6,sheenRoughness:0.3,sheenColor:new THREE.Color(0xffffff),
+    iridescence:0.35,iridescenceIOR:1.35,specularIntensity:1.0,envMapIntensity:1.15,
+    emissive:f.b,emissiveIntensity:0.12});   // polished + iridescent cosmic sheen, vivid premium
   const box=new THREE.Mesh(GEO,mat); box.castShadow=true; box.receiveShadow=true;
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
   icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.365;
@@ -338,7 +339,7 @@ function generate(level){
     grp.rotation.y=(Math.random()-0.5)*0.5;   // random spin → natural, un-arranged
     tileGroup.add(grp);
     S.tiles.push({ id:id++, type, gx:p.x, gz:p.z, layer:p.layer, taken:false, gone:false,
-      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, introDelay:p.layer*0.13 + Math.random()*0.16, t:0, slot:-1, pop:0 });
+      grp, home, state:'wait', vy:0, squash:0, bounces:0, dropping:false, rvx:0, rvz:0, introDelay:p.layer*0.05 + Math.random()*0.12, t:0, slot:-1, pop:0 });
   }
   computeBounds(); fitContent();
 }
@@ -438,8 +439,11 @@ function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min
   generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play'; }
 
 // 3s cinematic intro: orbit/focus, THEN tiles drop in
-function beginIntro(){ S.phase='intro'; S.introT=0; for(const t of S.tiles){ t.state='wait'; t.grp.scale.setScalar(0.001); } }
-function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; t.vy=0; t.bounces=0; t.dropping=false; t.squash=0; } }
+function beginIntro(){ S.phase='intro'; S.introT=0; dropTiles();
+  // tumble: tiles spin while they drop in → flash their glossy edges
+  for(const t of S.tiles){ t.rvx=(Math.random()-0.5)*9; t.rvz=(Math.random()-0.5)*9;
+    t.grp.rotation.set((Math.random()-0.5)*1.3,(Math.random()-0.5)*1.0,(Math.random()-0.5)*1.3); } }
+function dropTiles(){ for(const t of S.tiles){ t.state='intro'; t.t=0; t.vy=0; t.bounces=0; t.dropping=false; t.squash=0; t.rvx=0; t.rvz=0; } }
 
 function pickTile(t){
   if(S.over || S.phase!=='play') return;
@@ -468,8 +472,11 @@ function clearTriple(){
   if(mt<0){ if(S.trayArr.length>=SLOTS && S.trayArr.every(t=>t.state==='tray')) gameOver(); refreshHUD(); return; }
   let need=3; const removing=[];
   S.trayArr=S.trayArr.filter(t=>{ if(t.type===mt && t.state==='tray' && need>0){ need--; removing.push(t); return false; } return true; });
-  for(const t of removing){ t.state='pop'; t.t=0; burst(t.grp.position,t.type); }
-  S.score+=30; sndMatch(); buzz([0,18,40,28]); showCombo('MATCH!'); flash(0.3); shake(0.55);
+  const ctr=new THREE.Vector3(); removing.forEach(t=>ctr.add(t.grp.position)); ctr.multiplyScalar(1/Math.max(1,removing.length)); ctr.y+=0.15;
+  const ec=FACES[mt%FACES.length].e;
+  for(const t of removing){ t.state='pop'; t.t=0; t.popTo=ctr.clone(); burst(t.grp.position,t.type); }
+  shockwave(ctr,ec); sparkleBurst(ctr,ec);
+  S.score+=30; sndMatch(); buzz([0,18,45,30]); showCombo('MATCH!'); flash(0.5); shake(0.8);
   reindexTray(); refreshHUD();
   if(!S.tiles.some(x=>!x.taken&&!x.gone) && S.trayArr.length===0){ S.won=true; winLevel(); return; }
   setTimeout(()=>checkTray(), 60);   // chain combos after tiles resettle
@@ -506,6 +513,16 @@ function burst(pos,type){ const e=FACES[type%FACES.length].e; for(let i=0;i<14;i
 function confetti(){ for(let i=0;i<90;i++){ const m=getP(); const e=FACES[rnd(FACES.length)].e;
   m.material.color.setHex(e); m.position.set((Math.random()-0.5)*6,5+Math.random()*2,(Math.random()-0.5)*4);
   pLive.push({m,vx:(Math.random()-0.5)*6,vy:Math.random()*3,vz:(Math.random()-0.5)*6,life:1.6,sc:1.3}); } }
+// rich central burst for a match (sparkles fly up & out)
+function sparkleBurst(pos,col){ for(let i=0;i<28;i++){ const m=getP();
+  m.material.color.setHex(Math.random()<0.55?col:0xffffff); m.position.copy(pos);
+  const a=Math.random()*6.28, sp=2.5+Math.random()*5.5; pLive.push({m,vx:Math.cos(a)*sp,vy:2.5+Math.random()*6,vz:Math.sin(a)*sp,life:1.15,sc:1.5}); } }
+// expanding shockwave ring (premium ripple at the match)
+const swList=[], swGeo=new THREE.RingGeometry(0.34,0.46,40);
+function shockwave(pos,col){ const m=new THREE.Mesh(swGeo,new THREE.MeshBasicMaterial({color:col||0xffffff,transparent:true,opacity:0.85,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.position.set(pos.x,pos.y-0.05,pos.z); m.rotation.x=-Math.PI/2; scene.add(m); swList.push({m,t:0}); }
+function updateShock(dt){ for(let i=swList.length-1;i>=0;i--){ const s=swList[i]; s.t+=dt*2.4; const sc=0.5+s.t*5.5; s.m.scale.set(sc,sc,sc);
+  s.m.material.opacity=Math.max(0,0.85*(1-s.t)); if(s.t>=1){ scene.remove(s.m); s.m.material.dispose(); swList.splice(i,1); } } }
 function updateParts(dt){ for(let i=pLive.length-1;i>=0;i--){ const p=pLive[i];
   p.vy-=9*dt; p.m.position.x+=p.vx*dt; p.m.position.y+=p.vy*dt; p.m.position.z+=p.vz*dt; p.life-=dt*1.4;
   const s=Math.max(0.001,p.life)*p.sc; p.m.scale.setScalar(s);
@@ -576,6 +593,7 @@ function animate(){
       if(t.t>=t.introDelay){
         if(!t.dropping){ t.dropping=true; g.position.set(t.home.x,t.home.y+6.5,t.home.z); g.scale.setScalar(1); t.vy=0; }
         t.vy-=GRAVITY*dt; g.position.y+=t.vy*dt;
+        if(t.rvx||t.rvz){ g.rotation.x+=t.rvx*dt; g.rotation.z+=t.rvz*dt; t.rvx*=0.95; t.rvz*=0.95; }   // tumble in the air
         if(g.position.y<=t.home.y){ g.position.y=t.home.y; const imp=Math.min(1,-t.vy/12);
           if(-t.vy>2.4 && (t.bounces|0)<1){ t.bounces=(t.bounces|0)+1; t.vy=-t.vy*0.34; t.squash=Math.max(t.squash,imp*0.7); }
           else { t.vy=0; t.state='board'; t.squash=Math.max(t.squash,imp); if(imp>0.25){ shake(imp*0.35); buzz(Math.round(imp*16)); spawnDust(g.position,imp); clack(0.7+Math.random()*0.35, 0.1+imp*0.14); } }
@@ -586,6 +604,7 @@ function animate(){
     }
     else if(t.state==='board'){ const free=isFree(t);
         const ty=t.home.y+(free?Math.sin(tnow*2.2+t.gx+t.gz)*0.05:0); g.position.y=ease(g.position.y,ty,0.2);
+        g.rotation.x=ease(g.rotation.x,0,0.16); g.rotation.z=ease(g.rotation.z,0,0.16);   // settle flat after the tumble
         let base=1; if(t.pop>0){ base=1+0.12*t.pop; t.pop*=0.86; if(t.pop<0.02)t.pop=0; }
         setScaleSquash(g,base,t.squash); }
     else if(t.state==='fly'||t.state==='return'){
@@ -605,25 +624,29 @@ function animate(){
     else if(t.state==='tray'){ const tp=trayPos(t.slot); t.home.copy(tp);
         g.position.x=ease(g.position.x,tp.x,0.25); g.position.z=ease(g.position.z,tp.z,0.25);
         g.position.y=ease(g.position.y, tp.y+Math.sin(tnow*3+t.slot)*0.02, 0.3); setScaleSquash(g,layout.trayScale||0.82,t.squash); }
-    else if(t.state==='pop'){ t.t+=dt*3; const s=Math.max(0.001,1.35-t.t*1.7); g.scale.setScalar(s); g.position.y+=dt*1.6; g.rotation.y+=dt*7;
+    else if(t.state==='pop'){ t.t+=dt*2.7; const k=t.t;
+        const s=k<0.22 ? 1+k*1.9 : Math.max(0.001, 1.42-(k-0.22)*2.1);   // anticipation pop → burst
+        g.scale.setScalar(s); g.rotation.y+=dt*11; g.rotation.x+=dt*6;
+        if(t.popTo){ g.position.lerp(t.popTo,0.14); g.position.y+=dt*1.5; }
+        g.userData.mat.emissiveIntensity=1.7;   // bright cosmic flash
         if(t.t>=1){ t.gone=true; tileGroup.remove(g); S.tiles.splice(i,1); } }
   }
   // motes drift
   motes.rotation.y += dt*0.02; motes.position.y = Math.sin(tnow*0.3)*0.3;
-  // camera: cinematic intro orbit → anchored play view (+ shake)
+  // camera: FAST dramatic swoop while the tiles tumble in (catches the glossy edges)
   if(S.phase==='intro'){
-    S.introT+=dt; const dur=3.0; let e=Math.min(1,S.introT/dur); e=e<0.5?2*e*e:1-Math.pow(-2*e+2,2)/2;
+    S.introT+=dt; const dur=1.5; let e=Math.min(1,S.introT/dur); e=1-Math.pow(1-e,3);   // easeOutCubic
     const look=camTarget.look, base=camTarget.pos.clone().sub(look);
-    const ang=(1-e)*Math.PI*1.15, lift=(1-e)*4.5, out=1+(1-e)*0.55;
+    const ang=(1-e)*(-0.65), lift=(1-e)*(-3.2), out=1-(1-e)*0.22;   // start low, rotated & close → ease to play view
     const cx=base.x*Math.cos(ang)-base.z*Math.sin(ang), cz=base.x*Math.sin(ang)+base.z*Math.cos(ang);
-    camera.position.set(look.x+cx*out, look.y+base.y*out+lift, look.z+cz*out); camera.lookAt(look);
-    if(S.introT>=dur){ S.phase='play'; camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); dropTiles(); }
+    camera.position.set(look.x+cx*out, Math.max(1.6, look.y+base.y*out+lift), look.z+cz*out); camera.lookAt(look);
+    if(S.introT>=dur){ S.phase='play'; camera.position.copy(camTarget.pos); camera.lookAt(camTarget.look); }
   } else {
     camera.position.copy(camTarget.pos);
     if(shakeAmt>0){ camera.position.x+=(Math.random()-0.5)*shakeAmt*0.12; camera.position.y+=(Math.random()-0.5)*shakeAmt*0.1; shakeAmt*=0.86; if(shakeAmt<0.02)shakeAmt=0; }
     camera.lookAt(camTarget.look);
   }
-  updateParts(dt);
+  updateParts(dt); updateShock(dt);
   renderer.render(scene,camera);
   requestAnimationFrame(animate);
 }
