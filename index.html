@@ -163,11 +163,13 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
 
 // ---------------- palettes / symbols / THEMES (level progression) ----------------
+// every palette = 8 maximally-distinct HUES (red→orange→yellow→green→teal→blue→purple→pink),
+// just re-toned to suit each material. This keeps tile TYPES easy to tell apart at a glance.
 const PAL = {
-  wood:[{b:0xb5793a,e:0xe6b878},{b:0x9a4f2c,e:0xcc8458},{b:0xc8a44a,e:0xeed094},{b:0x6e4326,e:0xa37c54},{b:0xb05a36,e:0xdf9068},{b:0x827238,e:0xb6a468},{b:0xc06a48,e:0xea9e7e},{b:0x5a3a26,e:0x8c6646}],
-  candy:[{b:0x1fd9c4,e:0x7ff0e2},{b:0xff4f93,e:0xff8fbb},{b:0xffc21f,e:0xffdd73},{b:0x37b6ff,e:0x86d8ff},{b:0xa86bff,e:0xc9a6ff},{b:0x2fdd86,e:0x8af0bb},{b:0xff7a44,e:0xffae84},{b:0xa6e83a,e:0xcef185},{b:0xff5f86,e:0xff9bb4},{b:0x2fe0e0,e:0x86f0f0}],
-  jewel:[{b:0x16c9a0,e:0x6ff0d4},{b:0xe83a6b,e:0xff7a9e},{b:0x3a6bff,e:0x86a6ff},{b:0xb83aff,e:0xd98aff},{b:0xffb01f,e:0xffd470},{b:0x1fb0e8,e:0x7fd8ff},{b:0xe85ad0,e:0xff9be8},{b:0x46e83a,e:0x9bf07f}],
-  steel:[{b:0xaab8cc,e:0xdce6f2},{b:0xcea760,e:0xf0d8a4},{b:0x8e98ac,e:0xc3ccdc},{b:0xd6dde8,e:0xf4f7fb},{b:0xb87a50,e:0xddac88},{b:0x748098,e:0xa8b2c8},{b:0xd0b86e,e:0xead9a2},{b:0x96a6be,e:0xc6d0e0}],
+  wood:[{b:0xcf4a39,e:0xee8a78},{b:0xe08a32,e:0xf3b878},{b:0xe6c23a,e:0xf3dd86},{b:0x6fb24a,e:0xa8da8a},{b:0x32a99a,e:0x84d2c6},{b:0x4486c8,e:0x8cbae6},{b:0x9166c8,e:0xbf9ee6},{b:0xcf5790,e:0xee9bc4}],   // stained-wood, distinct colours
+  candy:[{b:0xff4d4d,e:0xff9b9b},{b:0xff9f1c,e:0xffc97a},{b:0xffd83a,e:0xffec8a},{b:0x46d35e,e:0x95eaa6},{b:0x2fd8d8,e:0x8af0f0},{b:0x3aa0ff,e:0x8ec9ff},{b:0xa86bff,e:0xc9a6ff},{b:0xff5fb0,e:0xff9bd0}],
+  jewel:[{b:0xff3b6b,e:0xff8aa8},{b:0xff8a2f,e:0xffba80},{b:0xffd23a,e:0xffe68a},{b:0x37d36b,e:0x8eeaa8},{b:0x1fc8d8,e:0x86eaf0},{b:0x3a86ff,e:0x8eb8ff},{b:0xb83aff,e:0xd98aff},{b:0xff4fd0,e:0xff9be8}],
+  steel:[{b:0xd05a4a,e:0xee9484},{b:0xd0922f,e:0xf0c184},{b:0xc8b23a,e:0xe6d486},{b:0x52ad62,e:0x96d6a4},{b:0x3aa6ae,e:0x88d4da},{b:0x4f8ad0,e:0x96bce8},{b:0x9070c8,e:0xc0a4e6},{b:0xc85a92,e:0xee9bc6}],   // metallic tints, still distinct
   cosmic:[{b:0x7a5cff,e:0xb39bff},{b:0x2fd8e0,e:0x86f0f4},{b:0xff4fd0,e:0xff9be8},{b:0x4f86ff,e:0x9bb8ff},{b:0xa050ff,e:0xcf9bff},{b:0x2fffb0,e:0x9bffd8},{b:0xff6f8a,e:0xffa8b8},{b:0x50c0ff,e:0x9bdcff}],
 };
 const SYM = {
@@ -307,14 +309,22 @@ const motes=(function(){ const n=90,g=new THREE.BufferGeometry(),pos=new Float32
 // ---------------- icon textures ----------------
 const iconCache={};
 function iconTexture(type){ if(iconCache[type])return iconCache[type];
-  const s=160, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-  g.clearRect(0,0,s,s); g.font=Math.round(s*0.66)+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-  g.textAlign='center'; g.textBaseline='middle'; g.fillText(SYMBOLS[type%SYMBOLS.length], s/2, s/2+s*0.04);
-  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4; iconCache[type]=tex; return tex; }
+  const s=256, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
+  g.clearRect(0,0,s,s);
+  // bright soft disc behind the icon → it stands out clearly on ANY tile colour or material
+  const r=s*0.42, rg=g.createRadialGradient(s/2,s*0.46,r*0.15,s/2,s/2,r);
+  rg.addColorStop(0,'rgba(255,255,255,0.98)'); rg.addColorStop(0.72,'rgba(255,255,255,0.95)'); rg.addColorStop(0.92,'rgba(255,255,255,0.7)'); rg.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rg; g.beginPath(); g.arc(s/2,s/2,r,0,6.28); g.fill();
+  // big emoji with a soft drop shadow for depth
+  g.font='700 '+Math.round(s*0.6)+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  g.textAlign='center'; g.textBaseline='middle';
+  g.shadowColor='rgba(0,0,0,0.32)'; g.shadowBlur=s*0.045; g.shadowOffsetY=s*0.022;
+  g.fillText(SYMBOLS[type%SYMBOLS.length], s/2, s/2+s*0.03);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=8; iconCache[type]=tex; return tex; }
 
 // ---------------- tile factory ----------------
 const TILE=1.0, GEO=new RoundedBoxGeometry(TILE,TILE*0.72,TILE,4,0.12);   // boxy cube, edges chamfered (not sharp, not too round)
-const ICON_GEO=new THREE.PlaneGeometry(TILE*0.6,TILE*0.6);
+const ICON_GEO=new THREE.PlaneGeometry(TILE*0.82,TILE*0.82);   // big icon badge — easy to read & match
 const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 // material per theme: plastic (glossy candy) / metal (chrome) / glass (transparent crystal)
@@ -362,7 +372,7 @@ function generate(level){
   // pile footprint MATCHES the visible viewport rectangle (wide on desktop, taller on phones)
   const a=camera.aspect||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide, fills the FULL width
+  if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide × deep; both-axes fit fills the tall frame
   else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
   else if(a<1.8){ cols0=8; rows0=4; }        // landscape — wide rectangle, fills width AND height
   else { cols0=11; rows0=4; }                // ultra-wide
@@ -440,7 +450,9 @@ function fitContent(){
   const pts=[]; for(const x of[layout.cMinX,layout.cMaxX]) for(const z of[layout.cMinZ,layout.cMaxZ]) for(const y of[layout.cMinY,layout.cMaxY]) pts.push(new THREE.Vector3(x,y,z));
   // FILL: solve the distance so the content reaches the safe margins (no big empty
   // borders). Extra top margin keeps the pile clear of the HUD chips.
-  const portrait=a<0.72; const mx=(portrait?1.0:0.97), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3();
+  // myTop is intentionally generous → leaves a clear band at the top for the HUD chips
+  // AND the browser's top URL bar (Chrome puts it at the top; Safari at the bottom).
+  const portrait=a<0.72; const mx=(portrait?1.0:0.97), myTop=(portrait?0.88:0.9), myBot=0.99, tmp=new THREE.Vector3();
   // start roomy — scales with content size so big/tall piles never start clipped-close
   let d=Math.max(10,(layout.cMaxX-layout.cMinX)+(layout.cMaxZ-layout.cMinZ));
   for(let it=0;it<14;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
@@ -448,7 +460,7 @@ function fitContent(){
     let m=0.0001, clipped=false; for(const p of pts){ tmp.copy(p).project(camera);
       if(!isFinite(tmp.x)||!isFinite(tmp.y)||tmp.z>1){ clipped=true; continue; }   // corner behind/past far → MUST pull back
       const xx=Math.abs(tmp.x)/mx, yy=(tmp.y>0?tmp.y/myTop:-tmp.y/myBot);
-      m=Math.max(m, portrait?xx:Math.max(xx,yy)); }   // portrait → fill the FULL width (100%)
+      m=Math.max(m, Math.max(xx,yy)); }   // constrain BOTH axes → nothing ever spills off (top or sides)
     if(clipped) m=Math.max(m,1.5);   // a corner was clipped → force zoom OUT, never in
     m=THREE.MathUtils.clamp(m,0.6,1.8); d=THREE.MathUtils.clamp(d*m,7,90); }   // smooth, bounded; high cap fits tall piles
   camTarget.pos.copy(C).addScaledVector(dir,d); camTarget.look.copy(C);
