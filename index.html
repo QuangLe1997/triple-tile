@@ -153,12 +153,12 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
 
 // ---------------- palette + symbols ----------------
-// vivid claymorphism palette (bright albedo; e = accent for glow/particles)
+// bright candy palette (matches the key-art banner)
 const FACES = [
-  {b:0x4ECDC4,e:0x6ff0e6}, {b:0xFF6B9D,e:0xff8fb6}, {b:0xFFC75F,e:0xffd98a},
-  {b:0x5BC8FF,e:0x8adcff}, {b:0xB48CFF,e:0xcdb0ff}, {b:0x6BE3B8,e:0x9af0d2},
-  {b:0xFF8A5B,e:0xffae88}, {b:0x9BE36A,e:0xbdf094}, {b:0xFF7AA8,e:0xffa1c4},
-  {b:0x57E0E0,e:0x8af0f0}, {b:0xFFD23F,e:0xffe27a}, {b:0xC9A8FF,e:0xdcc6ff},
+  {b:0x57E3C8,e:0x9bf0e0}, {b:0xFF6FA8,e:0xff9cc4}, {b:0xFFD15F,e:0xffe294},
+  {b:0x6FC6FF,e:0x9eddff}, {b:0xB98CFF,e:0xd2b6ff}, {b:0x6BE89A,e:0x9ff3bf},
+  {b:0xFF9E78,e:0xffc1a4}, {b:0xC0F05F,e:0xd9f794}, {b:0xFF7E9E,e:0xffa8bd},
+  {b:0x5FE0E8,e:0x93f0f4}, {b:0xFFC24A,e:0xffd87f}, {b:0xCBA0FF,e:0xddc4ff},
 ];
 const SYMBOLS = ['🍓','🍋','🍇','🫐','🍊','🥝','🍑','🌶️','🥥','🔔','⭐','💎','🍀','🌸','🎈','🍪'];
 
@@ -200,15 +200,26 @@ function buzz(p){ if(navigator.vibrate){ try{ navigator.vibrate(p); }catch(e){} 
 const canvas=document.getElementById('c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.05;
+renderer.toneMapping=THREE.NeutralToneMapping; renderer.toneMappingExposure=1.12;
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(48, 1, 0.1, 100);
 const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) };
 
-// gradient backdrop (dark navy per spec) — high contrast, no overlay, no haze
-(function(){ const cv=document.createElement('canvas'); cv.width=2; cv.height=256; const g=cv.getContext('2d');
-  const grd=g.createLinearGradient(0,0,0,256); grd.addColorStop(0,'#1a1a2e'); grd.addColorStop(1,'#10182c');
-  g.fillStyle=grd; g.fillRect(0,0,2,256); const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
+// vibrant nebula backdrop (matches the key-art banner: navy + colour glows + sparkles)
+(function(){ const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
+  let grd=g.createLinearGradient(0,0,0,s); grd.addColorStop(0,'#251c4a'); grd.addColorStop(0.55,'#161a3e'); grd.addColorStop(1,'#0e1230');
+  g.fillStyle=grd; g.fillRect(0,0,s,s);
+  const glow=(x,y,r,col,al)=>{ const rg=g.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,col); rg.addColorStop(1,'rgba(0,0,0,0)'); g.globalAlpha=al; g.fillStyle=rg; g.fillRect(0,0,s,s); g.globalAlpha=1; };
+  glow(s*0.16,s*0.20,s*0.55,'#ff5fa0',0.55); glow(s*0.86,s*0.18,s*0.52,'#4fe0d0',0.5);
+  glow(s*0.52,s*0.92,s*0.6,'#9a6bff',0.42); glow(s*0.82,s*0.66,s*0.42,'#ffd15f',0.2);
+  g.fillStyle='#ffffff'; for(let i=0;i<80;i++){ g.globalAlpha=Math.random()*0.6+0.2; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.7+0.3,0,6.28); g.fill(); } g.globalAlpha=1;
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
+// soft studio environment → clean glossy candy reflections (premium, not glary)
+scene.environment=(function(){ const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const g=cv.getContext('2d');
+  const grd=g.createLinearGradient(0,0,0,128); grd.addColorStop(0,'#ffffff'); grd.addColorStop(0.45,'#b9c6e6'); grd.addColorStop(1,'#222a44');
+  g.fillStyle=grd; g.fillRect(0,0,256,128);
+  const tex=new THREE.CanvasTexture(cv); tex.mapping=THREE.EquirectangularReflectionMapping; tex.colorSpace=THREE.SRGBColorSpace;
+  const pm=new THREE.PMREMGenerator(renderer); const env=pm.fromEquirectangular(tex).texture; tex.dispose(); pm.dispose(); return env; })();
 
 // lights — neutral key + fill + ambient for TRUE, sharp albedo colors (no glow, no tint)
 const hemi=new THREE.HemisphereLight(0xdfe8ff,0x141a2c,0.55); scene.add(hemi);
@@ -244,17 +255,18 @@ function iconTexture(type){ if(iconCache[type])return iconCache[type];
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=4; iconCache[type]=tex; return tex; }
 
 // ---------------- tile factory ----------------
-const TILE=1.0, GEO=new RoundedBoxGeometry(TILE,TILE*0.42,TILE,5,0.18);
-const ICON_GEO=new THREE.PlaneGeometry(TILE*0.66,TILE*0.66);
+const TILE=1.0, GEO=new RoundedBoxGeometry(TILE,TILE*0.6,TILE,6,0.22);
+const ICON_GEO=new THREE.PlaneGeometry(TILE*0.62,TILE*0.62);
 const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
 function makeTileMesh(type){
   const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.46,metalness:0.0,
-    clearcoat:1.0,clearcoatRoughness:0.16,emissive:0x000000,emissiveIntensity:0});
+  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.38,metalness:0.0,
+    clearcoat:1.0,clearcoatRoughness:0.1,sheen:0.55,sheenRoughness:0.4,sheenColor:new THREE.Color(0xffffff),
+    envMapIntensity:0.65,emissive:0x000000,emissiveIntensity:0});
   const box=new THREE.Mesh(GEO,mat);
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
-  icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.215;
+  icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.305;
   const grp=new THREE.Group(); grp.add(box); grp.add(icon);
   grp.userData={mat,box,icon,baseEmissive:0.08};
   return grp;
@@ -348,20 +360,28 @@ const trayDock=new THREE.Group(); scene.add(trayDock);
 function buildTrayDock(){
   while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
   const n=7, gap=layout.trayGap||0.94, span=layout.traySpan||6.6;
-  const baseW=span+0.7, baseD=gap+0.7, topY=layout.dockTop, z=layout.trayZ;
-  const baseH=0.6, baseCY=topY-baseH/2;
-  // glowing accent halo under the dock (premium rim)
-  const halo=new THREE.Mesh(new RoundedBoxGeometry(baseW+0.5,0.14,baseD+0.5,4,0.4),
-    new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:0x4ECDC4,emissiveIntensity:0.85,roughness:0.4,metalness:0}));
-  halo.position.set(0,baseCY-baseH*0.42,z); trayDock.add(halo);
-  // main dock slab (dark glossy clay)
-  const base=new THREE.Mesh(new RoundedBoxGeometry(baseW,baseH,baseD,5,0.22),
-    new THREE.MeshPhysicalMaterial({color:0x1b2440,roughness:0.42,metalness:0,clearcoat:1.0,clearcoatRoughness:0.18,envMapIntensity:0.5,emissive:0x10182e,emissiveIntensity:0.18}));
+  const baseW=span+0.8, baseD=gap+0.95, topY=layout.dockTop, z=layout.trayZ;
+  const baseH=0.66, baseCY=topY-baseH/2;
+  // soft glowing platform halo (teal) — premium accent
+  const halo=new THREE.Mesh(new RoundedBoxGeometry(baseW+0.55,0.12,baseD+0.55,4,0.5),
+    new THREE.MeshStandardMaterial({color:0x081018,emissive:0x4fe0d0,emissiveIntensity:0.8,roughness:0.5,metalness:0}));
+  halo.position.set(0,baseCY-baseH*0.46,z); trayDock.add(halo);
+  // main dock — glossy premium clay with reflections
+  const base=new THREE.Mesh(new RoundedBoxGeometry(baseW,baseH,baseD,6,0.28),
+    new THREE.MeshPhysicalMaterial({color:0x232c54,roughness:0.32,metalness:0.0,clearcoat:1.0,clearcoatRoughness:0.1,envMapIntensity:0.75,emissive:0x0e1530,emissiveIntensity:0.14}));
   base.position.set(0,baseCY,z); trayDock.add(base);
-  // inset slot wells
-  const wgeo=new RoundedBoxGeometry(gap*0.82,0.16,gap*0.82,4,0.14);
-  const wmat=new THREE.MeshStandardMaterial({color:0x0c1120,roughness:0.7,metalness:0,emissive:0x1a2740,emissiveIntensity:0.25});
-  for(let i=0;i<n;i++){ const m=new THREE.Mesh(wgeo,wmat); m.position.set((i-(n-1)/2)*gap, topY-0.02, z); trayDock.add(m); }
+  // gold accent strip along the front lip
+  const trim=new THREE.Mesh(new RoundedBoxGeometry(baseW-0.1,0.07,0.14,3,0.05),
+    new THREE.MeshStandardMaterial({color:0x3a2f12,emissive:0xffd15f,emissiveIntensity:0.55,roughness:0.35,metalness:0.4}));
+  trim.position.set(0,topY-0.06,z+baseD/2-0.06); trayDock.add(trim);
+  // premium sockets: bright rim frame + glossy inset well
+  const rgeo=new RoundedBoxGeometry(gap*0.9,0.07,gap*0.9,4,0.18);
+  const rmat=new THREE.MeshStandardMaterial({color:0x0a1018,emissive:0x6ff0e0,emissiveIntensity:0.3,roughness:0.5,metalness:0});
+  const wgeo=new RoundedBoxGeometry(gap*0.78,0.2,gap*0.78,5,0.16);
+  const wmat=new THREE.MeshPhysicalMaterial({color:0x0d1730,roughness:0.5,metalness:0,clearcoat:0.8,clearcoatRoughness:0.2,emissive:0x16264a,emissiveIntensity:0.32});
+  for(let i=0;i<n;i++){ const x=(i-(n-1)/2)*gap;
+    const r=new THREE.Mesh(rgeo,rmat); r.position.set(x,topY-0.005,z); trayDock.add(r);
+    const w=new THREE.Mesh(wgeo,wmat); w.position.set(x,topY-0.05,z); trayDock.add(w); }
 }
 function buildTrayFrames(){ buildTrayDock(); }
 
@@ -465,8 +485,8 @@ function showCombo(txt){ const el=document.getElementById('combo'); el.textConte
   clearTimeout(comboT); comboT=setTimeout(()=>{el.style.opacity=0;el.style.transform='translateX(-50%) scale(.5)';},700); }
 function flash(v){ const f=document.getElementById('flash'); f.style.transition='none'; f.style.opacity=v;
   requestAnimationFrame(()=>{ f.style.transition='opacity .5s'; f.style.opacity=0; }); }
-function hide(id){ document.getElementById(id).classList.add('hidden'); }
-function show(id){ document.getElementById(id).classList.remove('hidden'); }
+function hide(id){ const el=document.getElementById(id); el.classList.add('hidden'); clearTimeout(el._ht); el._ht=setTimeout(()=>{ el.style.display='none'; },420); }
+function show(id){ const el=document.getElementById(id); clearTimeout(el._ht); el.style.display=''; void el.offsetWidth; el.classList.remove('hidden'); }
 function showResult(win){ document.getElementById('resTitle').textContent=win?'LEVEL CLEAR':'GAME OVER';
   document.getElementById('res-score').textContent=S.score; document.getElementById('res-best').textContent=S.best;
   document.getElementById('newbestLine').style.display=(S.score>=S.best&&S.score>0)?'':'none';
