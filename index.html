@@ -25,7 +25,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--font);overflow:hidden;
     user-select:none;-webkit-user-select:none;touch-action:none;}
-  #c{position:fixed;inset:0;display:block;width:100%;height:100%;}
+  #c{position:fixed;top:0;left:0;display:block;width:100vw;height:100vh;height:100dvh;}  /* dvh excludes the URL bar; JS then sets exact px from visualViewport */
 
   #hud{position:fixed;left:0;right:0;top:max(10px,env(safe-area-inset-top));z-index:9;
     display:flex;gap:9px;justify-content:center;align-items:center;pointer-events:none;padding:0 12px;}
@@ -359,8 +359,8 @@ function generate(level){
   // difficulty ramps every level: deeper stacks + more icon types
   const layers=Math.min(6,2+Math.floor(level/2));
   const typeCount=Math.min(SYMBOLS.length,4+level);
-  // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
-  const a=(window.innerWidth/window.innerHeight)||0.5;
+  // pile footprint MATCHES the visible viewport rectangle (wide on desktop, taller on phones)
+  const a=camera.aspect||0.5;
   let cols0,rows0;
   if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide, fills the FULL width
   else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
@@ -440,14 +440,17 @@ function fitContent(){
   const pts=[]; for(const x of[layout.cMinX,layout.cMaxX]) for(const z of[layout.cMinZ,layout.cMaxZ]) for(const y of[layout.cMinY,layout.cMaxY]) pts.push(new THREE.Vector3(x,y,z));
   // FILL: solve the distance so the content reaches the safe margins (no big empty
   // borders). Extra top margin keeps the pile clear of the HUD chips.
-  const portrait=a<0.72; const mx=(portrait?1.0:0.97), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3(); let d=12;
-  for(let it=0;it<7;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
+  const portrait=a<0.72; const mx=(portrait?1.0:0.97), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3();
+  // start roomy — scales with content size so big/tall piles never start clipped-close
+  let d=Math.max(10,(layout.cMaxX-layout.cMinX)+(layout.cMaxZ-layout.cMinZ));
+  for(let it=0;it<14;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-    let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera);
-      if(!isFinite(tmp.x)||!isFinite(tmp.y)||tmp.z>1) continue;   // ignore points behind / past the far plane (bad projection)
+    let m=0.0001, clipped=false; for(const p of pts){ tmp.copy(p).project(camera);
+      if(!isFinite(tmp.x)||!isFinite(tmp.y)||tmp.z>1){ clipped=true; continue; }   // corner behind/past far → MUST pull back
       const xx=Math.abs(tmp.x)/mx, yy=(tmp.y>0?tmp.y/myTop:-tmp.y/myBot);
       m=Math.max(m, portrait?xx:Math.max(xx,yy)); }   // portrait → fill the FULL width (100%)
-    m=THREE.MathUtils.clamp(m,0.5,1.8); d=THREE.MathUtils.clamp(d*m,6,46); }   // no wild zoom jumps
+    if(clipped) m=Math.max(m,1.5);   // a corner was clipped → force zoom OUT, never in
+    m=THREE.MathUtils.clamp(m,0.6,1.8); d=THREE.MathUtils.clamp(d*m,7,90); }   // smooth, bounded; high cap fits tall piles
   camTarget.pos.copy(C).addScaledVector(dir,d); camTarget.look.copy(C);
   // ANCHOR the tray to the bottom of the screen: pan vertically until the tray's
   // front edge sits near the bottom margin (extra space, if any, goes to the top).
@@ -491,7 +494,9 @@ function buildTrayFrames(){ buildTrayDock(); }
 function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true; S.over=false; S.won=false;
   _lastTheme=null; generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); beginIntro(); showLevelBanner(S.level); }
 function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min(5,S.shuffle+1);
-  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play'; showLevelBanner(S.level); }
+  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play';
+  resize();   // re-sync renderer + camera fit to the CURRENT visible viewport (URL bar may have changed during the result overlay)
+  showLevelBanner(S.level); }
 
 // 3s cinematic intro: orbit/focus, THEN tiles drop in
 function beginIntro(){ S.phase='intro'; S.introT=0; dropTiles();
@@ -640,11 +645,18 @@ menuToggle.addEventListener('click',()=>{ toolsEl.classList.toggle('closed'); me
 
 // ---------------- resize ----------------
 let W=1,H=1;
-function resize(){ W=window.innerWidth; H=window.innerHeight; const dpr=Math.min(2,window.devicePixelRatio||1);
-  renderer.setPixelRatio(dpr); renderer.setSize(W,H,false); camera.aspect=W/H; camera.updateProjectionMatrix();
+// the REAL visible play area — visualViewport excludes the browser URL bar / toolbars
+// (which differ between Chrome & Safari and change as you scroll), so the camera fit
+// always matches what's actually on screen instead of the full device dimensions.
+function viewSize(){ const vv=window.visualViewport;
+  return { w:Math.max(1,Math.round(vv?vv.width:window.innerWidth)), h:Math.max(1,Math.round(vv?vv.height:window.innerHeight)) }; }
+function resize(){ const v=viewSize(); W=v.w; H=v.h; const dpr=Math.min(2,window.devicePixelRatio||1);
+  renderer.setPixelRatio(dpr); renderer.setSize(W,H,true);   // updateStyle → canvas CSS = exact visible viewport
+  camera.aspect=W/H; camera.updateProjectionMatrix();
   computeBounds(); fitContent(); }
 window.addEventListener('resize',resize);
 window.addEventListener('orientationchange',()=>setTimeout(resize,200));
+if(window.visualViewport){ window.visualViewport.addEventListener('resize',resize); window.visualViewport.addEventListener('scroll',resize); }
 
 // ---------------- main loop ----------------
 const clock=new THREE.Clock();
