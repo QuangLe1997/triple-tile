@@ -52,6 +52,14 @@
     background:linear-gradient(100deg,var(--mint),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 2px 18px rgba(231,192,106,.6));}
   #flash{position:fixed;inset:0;background:radial-gradient(circle,rgba(231,192,106,.35),transparent 70%);opacity:0;pointer-events:none;z-index:8;}
+  #levelBanner{position:fixed;left:50%;top:34%;transform:translate(-50%,-50%) scale(.8);z-index:14;pointer-events:none;text-align:center;
+    opacity:0;transition:opacity .5s cubic-bezier(.2,.9,.3,1),transform .6s cubic-bezier(.2,.9,.3,1);width:90%;max-width:560px;}
+  #levelBanner.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  #levelBanner .lb-tag{font-size:clamp(13px,3.4vw,18px);font-weight:800;letter-spacing:4px;color:#bfe9ff;opacity:.92;margin-bottom:6px;text-shadow:0 2px 14px rgba(0,0,0,.7);}
+  #levelBanner .lb-name{font-size:clamp(30px,8.5vw,58px);font-weight:900;letter-spacing:2px;line-height:1.05;
+    background:linear-gradient(100deg,var(--mint),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 3px 22px rgba(231,192,106,.55));}
+  #levelBanner .lb-story{margin-top:8px;font-size:clamp(13px,3.6vw,18px);font-weight:600;color:#eef2ff;opacity:.85;text-shadow:0 2px 12px rgba(0,0,0,.8);}
 
   .overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
     text-align:center;gap:22px;background:radial-gradient(120% 90% at 50% 38%,rgba(18,26,38,.55),rgba(5,8,14,.95));
@@ -120,6 +128,7 @@
 </div>
 <div id="combo"></div>
 <div id="flash"></div>
+<div id="levelBanner"><div class="lb-tag" id="lbTag">LEVEL 1</div><div class="lb-name" id="lbName">CANDY ORCHARD</div><div class="lb-story" id="lbStory"></div></div>
 
 <div class="overlay" id="menu">
   <div class="menu-dock">
@@ -153,15 +162,30 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
 
-// ---------------- palette + symbols ----------------
-// vivid, premium jewel-candy palette (saturated & bright, pops on black)
-const FACES = [
-  {b:0x1fd9c4,e:0x7ff0e2}, {b:0xff4f93,e:0xff8fbb}, {b:0xffc21f,e:0xffdd73},
-  {b:0x37b6ff,e:0x86d8ff}, {b:0xa86bff,e:0xc9a6ff}, {b:0x2fdd86,e:0x8af0bb},
-  {b:0xff7a44,e:0xffae84}, {b:0xa6e83a,e:0xcef185}, {b:0xff5f86,e:0xff9bb4},
-  {b:0x2fe0e0,e:0x86f0f0}, {b:0xffb31f,e:0xffd470}, {b:0xc07cff,e:0xd9b3ff},
+// ---------------- palettes / symbols / THEMES (level progression) ----------------
+const PAL = {
+  candy:[{b:0x1fd9c4,e:0x7ff0e2},{b:0xff4f93,e:0xff8fbb},{b:0xffc21f,e:0xffdd73},{b:0x37b6ff,e:0x86d8ff},{b:0xa86bff,e:0xc9a6ff},{b:0x2fdd86,e:0x8af0bb},{b:0xff7a44,e:0xffae84},{b:0xa6e83a,e:0xcef185},{b:0xff5f86,e:0xff9bb4},{b:0x2fe0e0,e:0x86f0f0}],
+  jewel:[{b:0x16c9a0,e:0x6ff0d4},{b:0xe83a6b,e:0xff7a9e},{b:0x3a6bff,e:0x86a6ff},{b:0xb83aff,e:0xd98aff},{b:0xffb01f,e:0xffd470},{b:0x1fb0e8,e:0x7fd8ff},{b:0xe85ad0,e:0xff9be8},{b:0x46e83a,e:0x9bf07f}],
+  steel:[{b:0xaab8cc,e:0xdce6f2},{b:0xcea760,e:0xf0d8a4},{b:0x8e98ac,e:0xc3ccdc},{b:0xd6dde8,e:0xf4f7fb},{b:0xb87a50,e:0xddac88},{b:0x748098,e:0xa8b2c8},{b:0xd0b86e,e:0xead9a2},{b:0x96a6be,e:0xc6d0e0}],
+  cosmic:[{b:0x7a5cff,e:0xb39bff},{b:0x2fd8e0,e:0x86f0f4},{b:0xff4fd0,e:0xff9be8},{b:0x4f86ff,e:0x9bb8ff},{b:0xa050ff,e:0xcf9bff},{b:0x2fffb0,e:0x9bffd8},{b:0xff6f8a,e:0xffa8b8},{b:0x50c0ff,e:0x9bdcff}],
+};
+const SYM = {
+  fruit:['🍓','🍋','🍇','🫐','🍊','🥝','🍑','🍎','🍒','🥥'],
+  gem:['💎','🔷','🔶','🟣','🟢','🔴','🟡','🟠'],
+  metal:['⚙️','🔩','🔧','🔨','⛓️','🪛','🔋','🧲'],
+  space:['🪐','⭐','🌙','☄️','🌟','🚀','🛸','✨'],
+};
+const THEMES = [
+  {from:1, name:'CANDY ORCHARD', story:'Where the journey begins.', mat:'plastic', pal:'candy', sym:'fruit', bg:'space', ring:0x5fe6e0},
+  {from:4, name:'CRYSTAL CAVERN', story:'Glass gems — sharper minds.', mat:'glass', pal:'jewel', sym:'gem', bg:'crystal', ring:0xffd86a},
+  {from:7, name:'IRON FORGE', story:'Forged in molten steel.', mat:'metal', pal:'steel', sym:'metal', bg:'forge', ring:0xff9a4a},
+  {from:10, name:'COSMIC DRIFT', story:'Adrift among the stars.', mat:'glass', pal:'cosmic', sym:'space', bg:'nebula', ring:0xb98cff},
 ];
-const SYMBOLS = ['🍓','🍋','🍇','🫐','🍊','🥝','🍑','🌶️','🥥','🔔','⭐','💎','🍀','🌸','🎈','🍪'];
+function themeForLevel(lv){ if(lv>12) return THEMES[(Math.floor((lv-1)/3))%THEMES.length];   // cycle (harder) after lv12
+  let t=THEMES[0]; for(const x of THEMES) if(lv>=x.from) t=x; return t; }
+let FACES=PAL.candy, SYMBOLS=SYM.fruit, MATSTYLE='plastic', RINGCOL=0x5fe6e0;
+function applyTheme(t){ S.theme=t; FACES=PAL[t.pal]||PAL.candy; SYMBOLS=SYM[t.sym]||SYM.fruit; MATSTYLE=t.mat; RINGCOL=t.ring;
+  for(const k in iconCache) delete iconCache[k]; buildBackground(t.bg); }
 
 // ---------------- state ----------------
 const S = {
@@ -227,17 +251,22 @@ const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(48, 1, 0.1, 100);
 const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) };
 
-// vibrant nebula backdrop (matches the key-art banner: navy + colour glows + sparkles)
-(function(){ const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-  // pure deep-space BLACK (no colour tint) + scattered stars
-  g.fillStyle='#000000'; g.fillRect(0,0,s,s);
-  let rg=g.createRadialGradient(s*0.5,s*0.45,s*0.05,s*0.5,s*0.5,s*0.8);
-  rg.addColorStop(0,'#0a0a0c'); rg.addColorStop(1,'#000000');
-  g.fillStyle=rg; g.fillRect(0,0,s,s);
-  for(let i=0;i<160;i++){ const r=Math.random()*1.4+0.2; g.globalAlpha=Math.random()*0.65+0.15; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,r,0,6.28); g.fill(); }
-  for(let i=0;i<8;i++){ g.globalAlpha=0.95; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.4+1.2,0,6.28); g.fill(); }
-  g.globalAlpha=1;
-  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
+// themed backdrop — rebuilt whenever the level theme changes (space/crystal/forge/nebula)
+let bgTex=null;
+function buildBackground(style){
+  const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
+  const stars=(n,col)=>{ for(let i=0;i<n;i++){ const r=Math.random()*1.4+0.2; g.globalAlpha=Math.random()*0.6+0.15; g.fillStyle=col||'#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,r,0,6.28); g.fill(); }
+    for(let i=0;i<6;i++){ g.globalAlpha=0.95; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.4+1.2,0,6.28); g.fill(); } g.globalAlpha=1; };
+  const glow=(x,y,r,col,al)=>{ const q=g.createRadialGradient(x,y,0,x,y,r); q.addColorStop(0,col); q.addColorStop(1,'rgba(0,0,0,0)'); g.globalAlpha=al; g.fillStyle=q; g.fillRect(0,0,s,s); g.globalAlpha=1; };
+  if(style==='crystal'){ const rg=g.createRadialGradient(s*0.5,s*0.4,s*0.05,s*0.5,s*0.55,s*0.85); rg.addColorStop(0,'#16214c'); rg.addColorStop(1,'#05060f');
+    g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.25,s*0.3,s*0.55,'#2a5ad0',0.28); glow(s*0.78,s*0.7,s*0.5,'#1aa6d0',0.22); stars(120,'#cfe6ff'); }
+  else if(style==='forge'){ const rg=g.createLinearGradient(0,0,0,s); rg.addColorStop(0,'#1c1611'); rg.addColorStop(1,'#0a0705');
+    g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.5,s*1.02,s*0.75,'#ff6a1a',0.42); glow(s*0.2,s*0.86,s*0.42,'#ff9a3a',0.26); glow(s*0.82,s*0.9,s*0.4,'#ff7a20',0.22); stars(50,'#ffceab'); }
+  else if(style==='nebula'){ g.fillStyle='#000000'; g.fillRect(0,0,s,s); glow(s*0.2,s*0.25,s*0.6,'#7a3aff',0.32); glow(s*0.82,s*0.3,s*0.52,'#2fd8e0',0.26); glow(s*0.5,s*0.88,s*0.62,'#ff4fd0',0.24); stars(170,'#ffffff'); }
+  else { g.fillStyle='#000000'; g.fillRect(0,0,s,s); const rg=g.createRadialGradient(s*0.5,s*0.45,s*0.05,s*0.5,s*0.5,s*0.8); rg.addColorStop(0,'#0a0a0c'); rg.addColorStop(1,'#000000'); g.fillStyle=rg; g.fillRect(0,0,s,s); stars(160,'#ffffff'); }
+  if(bgTex) bgTex.dispose(); bgTex=new THREE.CanvasTexture(cv); bgTex.colorSpace=THREE.SRGBColorSpace; scene.background=bgTex;
+}
+buildBackground('space');
 // soft studio environment → clean glossy candy reflections (premium, not glary)
 scene.environment=(function(){ const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const g=cv.getContext('2d');
   const grd=g.createLinearGradient(0,0,0,128); grd.addColorStop(0,'#ffffff'); grd.addColorStop(0.32,'#ffffff'); grd.addColorStop(0.5,'#cfd8f0'); grd.addColorStop(0.72,'#6b7aa6'); grd.addColorStop(1,'#2a3252');
@@ -282,12 +311,22 @@ const TILE=1.0, GEO=new RoundedBoxGeometry(TILE,TILE*0.72,TILE,4,0.12);   // box
 const ICON_GEO=new THREE.PlaneGeometry(TILE*0.6,TILE*0.6);
 const tileGroup=new THREE.Group(); scene.add(tileGroup);
 
-function makeTileMesh(type){
-  const f=FACES[type%FACES.length];
-  const mat=new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.18,metalness:0.15,
+// material per theme: plastic (glossy candy) / metal (chrome) / glass (transparent crystal)
+function tileMaterial(f){
+  if(MATSTYLE==='metal') return new THREE.MeshPhysicalMaterial({color:f.b,metalness:1.0,roughness:0.28,
+    clearcoat:0.6,clearcoatRoughness:0.2,envMapIntensity:1.6,emissive:f.b,emissiveIntensity:0.03});   // polished steel
+  if(MATSTYLE==='glass') return new THREE.MeshPhysicalMaterial({color:f.b,metalness:0,roughness:0.05,
+    transmission:0.92,thickness:0.9,ior:1.45,transparent:true,clearcoat:1.0,clearcoatRoughness:0.05,
+    iridescence:0.55,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],specularIntensity:1.0,
+    envMapIntensity:1.7,emissive:f.b,emissiveIntensity:0.07});   // transparent crystal glass
+  return new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.18,metalness:0.15,
     clearcoat:1.0,clearcoatRoughness:0.03,sheen:0.8,sheenRoughness:0.25,sheenColor:new THREE.Color(0xffffff),
     iridescence:0.7,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],
-    specularIntensity:1.0,envMapIntensity:1.4,emissive:f.b,emissiveIntensity:0.16});   // glossy + strong iridescent cosmic sheen
+    specularIntensity:1.0,envMapIntensity:1.4,emissive:f.b,emissiveIntensity:0.16});   // glossy plastic candy
+}
+function makeTileMesh(type){
+  const f=FACES[type%FACES.length];
+  const mat=tileMaterial(f);
   const box=new THREE.Mesh(GEO,mat); box.castShadow=true; box.receiveShadow=true;
   const icon=new THREE.Mesh(ICON_GEO,new THREE.MeshBasicMaterial({map:iconTexture(type),transparent:true,depthWrite:false}));
   icon.rotation.x=-Math.PI/2; icon.position.y=TILE*0.365;
@@ -306,9 +345,11 @@ function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a
 function clearTiles(){ for(const t of S.tiles){ tileGroup.remove(t.grp); } S.tiles=[]; S.trayArr=[]; }
 
 function generate(level){
+  applyTheme(themeForLevel(level));   // swap material / palette / icons / background / tray colour for this level's theme
   clearTiles(); S.history=[]; S.over=false; S.won=false; S.busy=false;
-  const layers=Math.min(5,2+Math.floor((level+1)/2));
-  const typeCount=Math.min(SYMBOLS.length,5+level);
+  // difficulty ramps every level: deeper stacks + more icon types
+  const layers=Math.min(6,2+Math.floor(level/2));
+  const typeCount=Math.min(SYMBOLS.length,4+level);
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
@@ -324,7 +365,8 @@ function generate(level){
   const cells=[]; for(let r=0;r<rows0;r++) for(let c=0;c<cols0;c++) cells.push({x:offX+c*step+(Math.random()-0.5)*0.1, z:offZ+r*step+0.3+(Math.random()-0.5)*0.1});
   const positions=[], height=cells.map(()=>0);
   for(let i=0;i<cells.length;i++){ positions.push({x:cells[i].x+(Math.random()-0.5)*0.16, z:cells[i].z+(Math.random()-0.5)*0.16, layer:0}); height[i]=1; }
-  for(let L=1;L<layers;L++){ const dens=0.42-(L-1)*0.12;
+  const baseDens=Math.min(0.62,0.42+(level-1)*0.025);   // higher levels = denser pile
+  for(let L=1;L<layers;L++){ const dens=baseDens-(L-1)*0.1;
     for(let i=0;i<cells.length;i++){ if(height[i]===L && Math.random()<dens){ height[i]++;
       positions.push({x:cells[i].x+(Math.random()-0.5)*0.36, z:cells[i].z+(Math.random()-0.5)*0.36, layer:L}); } } }
   // trim to a multiple of 3 by dropping a few TOP tiles (keeps every stack supported)
@@ -428,7 +470,7 @@ function buildTrayDock(){
   const padGeo=new RoundedBoxGeometry(tileW+0.2,0.08,tileW+0.2,4,0.16);
   const insGeo=new RoundedBoxGeometry(tileW+0.02,0.1,tileW+0.02,4,0.14);
   const insMat=new THREE.MeshStandardMaterial({color:0x10131f,roughness:0.65,metalness:0,emissive:0x080a12,emissiveIntensity:0.3});
-  const RING=0x5fe6e0;   // single elegant neon tone (no per-slot colours → no colour-match confusion)
+  const RING=RINGCOL;   // themed neon tone (one colour → no colour-match confusion)
   const ringMat=new THREE.MeshStandardMaterial({color:0x0a0e14,emissive:RING,emissiveIntensity:0.55,roughness:0.45,metalness:0});
   for(let i=0;i<n;i++){ const x=(i-(n-1)/2)*gap;
     const ring=new THREE.Mesh(padGeo,ringMat); ring.position.set(x,topY+0.01,z); trayDock.add(ring);
@@ -438,9 +480,9 @@ function buildTrayFrames(){ buildTrayDock(); }
 
 // ---------------- gameplay ----------------
 function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true; S.over=false; S.won=false;
-  generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); beginIntro(); }
+  _lastTheme=null; generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); beginIntro(); showLevelBanner(S.level); }
 function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min(5,S.shuffle+1);
-  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play'; }
+  generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play'; showLevelBanner(S.level); }
 
 // 3s cinematic intro: orbit/focus, THEN tiles drop in
 function beginIntro(){ S.phase='intro'; S.introT=0; dropTiles();
@@ -559,6 +601,14 @@ function showCombo(txt){ const el=document.getElementById('combo'); el.textConte
   clearTimeout(comboT); comboT=setTimeout(()=>{el.style.opacity=0;el.style.transform='translateX(-50%) scale(.5)';},700); }
 function flash(v){ const f=document.getElementById('flash'); f.style.transition='none'; f.style.opacity=v;
   requestAnimationFrame(()=>{ f.style.transition='opacity .5s'; f.style.opacity=0; }); }
+let _lbT=null, _lastTheme=null;
+function showLevelBanner(level){ const t=themeForLevel(level), el=document.getElementById('levelBanner');
+  const isNew=(!_lastTheme || _lastTheme.name!==t.name); _lastTheme=t;
+  document.getElementById('lbTag').textContent=(isNew?'✦ NEW REALM ✦  ':'')+'LEVEL '+level;
+  document.getElementById('lbName').textContent=t.name;
+  document.getElementById('lbStory').textContent=t.story;
+  el.classList.add('show'); clearTimeout(_lbT);
+  _lbT=setTimeout(()=>{ el.classList.remove('show'); }, isNew?2600:1700); }
 function hide(id){ const el=document.getElementById(id); el.classList.add('hidden'); clearTimeout(el._ht); el._ht=setTimeout(()=>{ el.style.display='none'; },420); }
 function show(id){ const el=document.getElementById(id); clearTimeout(el._ht); el.style.display=''; void el.offsetWidth; el.classList.remove('hidden'); }
 function showResult(win){ document.getElementById('resTitle').textContent=win?'LEVEL CLEAR':'GAME OVER';
