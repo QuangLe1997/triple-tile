@@ -293,10 +293,10 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide to fill the FULL screen width
-  else if(a<1.25){ cols0=5; rows0=4; }       // square-ish
-  else if(a<1.8){ cols0=7; rows0=3; }        // landscape — wide
-  else { cols0=9; rows0=3; }                 // ultra-wide
+  if(a<0.72){ cols0=4; rows0=7; }            // portrait — 4 wide, fills the FULL width
+  else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
+  else if(a<1.8){ cols0=8; rows0=4; }        // landscape — wide rectangle, fills width AND height
+  else { cols0=11; rows0=4; }                // ultra-wide
   const step=layout.step;
   const offX=-(cols0-1)*step/2, offZ=-(rows0-1)*step/2;
   // build a grid of cells, then STACK tiles into columns (each upper tile rests on
@@ -400,16 +400,16 @@ function buildTrayDock(){
   const baseW=span+0.45, baseD=tileW+0.7;
   // BRIGHT glossy bar — clean & premium, NOT a dim trough
   const bar=new THREE.Mesh(new RoundedBoxGeometry(baseW,0.26,baseD,5,0.13),
-    new THREE.MeshPhysicalMaterial({color:0xcdd6f2,roughness:0.22,metalness:0.1,clearcoat:1.0,clearcoatRoughness:0.08,envMapIntensity:0.8}));
+    new THREE.MeshPhysicalMaterial({color:0xd7dbe6,roughness:0.2,metalness:0.15,clearcoat:1.0,clearcoatRoughness:0.07,envMapIntensity:0.9}));
   bar.position.set(0,topY-0.13,z); bar.receiveShadow=true; trayDock.add(bar);
   // colourful glowing slot rings (bright, creative) + dark inset where the tile drops
   const padGeo=new RoundedBoxGeometry(tileW+0.2,0.08,tileW+0.2,4,0.16);
   const insGeo=new RoundedBoxGeometry(tileW+0.02,0.1,tileW+0.02,4,0.14);
-  const insMat=new THREE.MeshStandardMaterial({color:0x121426,roughness:0.7,metalness:0,emissive:0x0a0c18,emissiveIntensity:0.3});
-  const cols=[0x4ee0d0,0xffd15f,0xff7eb0,0x9a8cff,0x6be39a,0x5bc8ff,0xff9e78];
+  const insMat=new THREE.MeshStandardMaterial({color:0x10131f,roughness:0.65,metalness:0,emissive:0x080a12,emissiveIntensity:0.3});
+  const RING=0x5fe6e0;   // single elegant neon tone (no per-slot colours → no colour-match confusion)
+  const ringMat=new THREE.MeshStandardMaterial({color:0x0a0e14,emissive:RING,emissiveIntensity:0.55,roughness:0.45,metalness:0});
   for(let i=0;i<n;i++){ const x=(i-(n-1)/2)*gap;
-    const ring=new THREE.Mesh(padGeo,new THREE.MeshStandardMaterial({color:0x0a0e16,emissive:cols[i%cols.length],emissiveIntensity:0.95,roughness:0.4,metalness:0}));
-    ring.position.set(x,topY+0.01,z); trayDock.add(ring);
+    const ring=new THREE.Mesh(padGeo,ringMat); ring.position.set(x,topY+0.01,z); trayDock.add(ring);
     const ins=new THREE.Mesh(insGeo,insMat); ins.position.set(x,topY+0.03,z); trayDock.add(ins); }
 }
 function buildTrayFrames(){ buildTrayDock(); }
