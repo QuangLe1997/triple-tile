@@ -286,8 +286,8 @@ function generate(level){
   // pile footprint MATCHES the device rectangle (wide on desktop, taller on phones)
   const a=(window.innerWidth/window.innerHeight)||0.5;
   let cols0,rows0;
-  if(a<0.72){ cols0=5; rows0=7; }            // portrait — fills the tall frame
-  else if(a<1.25){ cols0=5; rows0=5; }       // square-ish
+  if(a<0.72){ cols0=5; rows0=8; }            // portrait — narrow & tall to match the screen
+  else if(a<1.25){ cols0=6; rows0=5; }       // square-ish
   else if(a<1.8){ cols0=8; rows0=3; }        // landscape — wide
   else { cols0=10; rows0=3; }                // ultra-wide
   const step=layout.step;
@@ -336,9 +336,9 @@ function computeBounds(){
   if(!isFinite(minX)){ minX=-2.5;maxX=2.5;minZ=-2.5;maxZ=1.5;maxY=0.4; }
   const pileW=maxX-minX;
   // premium tray: width adapts to the pile, placed in front of it (with a clear gap)
-  layout.traySpan=Math.max(6.0,Math.min(8.0,pileW+1.3));
+  layout.traySpan=Math.max(5.2,Math.min(8.0,pileW+0.4));   // tray ≈ pile width (don't force the horizontal fit)
   layout.trayGap=layout.traySpan/7; layout.trayScale=layout.trayGap*0.82;   // tray tiles fit slots WITH spacing (never overlap)
-  layout.trayZ=maxZ+2.1; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // tile rests on the recessed trough floor
+  layout.trayZ=maxZ+1.7; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // tile rests on the recessed trough floor
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
@@ -352,9 +352,9 @@ function fitContent(){
   // Viewing pitch by device: phones tilt DOWN more (moderate 3D, less oblique →
   // the grid spreads to fill the tall frame); landscape uses a lower angle.
   let pitchY, fov;
-  if(a<0.72){ pitchY=2.35; fov=46; }       // portrait — steep top-down, moderate 3D
-  else if(a<1.25){ pitchY=1.65; fov=44; }  // square-ish
-  else { pitchY=1.1; fov=40; }             // landscape — cinematic lower angle
+  if(a<0.72){ pitchY=2.95; fov=44; }       // portrait — near top-down so the grid fills the tall frame
+  else if(a<1.25){ pitchY=1.8; fov=44; }   // square-ish
+  else { pitchY=1.15; fov=40; }            // landscape — cinematic lower angle
   const dir=new THREE.Vector3(0,pitchY,1).normalize();
   camera.fov=fov; camera.updateProjectionMatrix();
   const C=new THREE.Vector3((layout.cMinX+layout.cMaxX)/2, 0.0, (layout.cMinZ+layout.cMaxZ)/2);
