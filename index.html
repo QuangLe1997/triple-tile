@@ -182,20 +182,37 @@ let master=null, musicNodes=[];
 function initAudioGraph(){ const c=ac(); if(!c||master)return; master=c.createGain(); master.gain.value=0.9; master.connect(c.destination); }
 function startMusic(){ const c=ac(); if(!c||musicNodes.length||S.muted)return; initAudioGraph();
   const root=110, mk=(f,ty,v)=>{ const o=c.createOscillator(),g=c.createGain(); o.type=ty; o.frequency.value=f; g.gain.value=v; o.connect(g); g.connect(master); o.start(); return [o,g]; };
-  const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=520;
-  const a=mk(root,'sine',0.05), b=mk(root*1.5,'triangle',0.022), d=mk(root*2.01,'sine',0.016);
+  const filt=c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=900;   // brighter = airier
+  // gentle, light pad — quiet root + fifth + a soft high shimmer
+  const a=mk(root,'sine',0.028), b=mk(root*1.5,'sine',0.012), d=mk(root*3.0,'sine',0.006);
   a[1].disconnect(); b[1].disconnect(); d[1].disconnect(); a[1].connect(filt); b[1].connect(filt); d[1].connect(filt); filt.connect(master);
-  const lfo=c.createOscillator(), lg=c.createGain(); lfo.frequency.value=0.08; lg.gain.value=140; lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
-  musicNodes=[a[0],b[0],d[0],lfo]; }
+  const lfo=c.createOscillator(), lg=c.createGain(); lfo.frequency.value=0.06; lg.gain.value=200; lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
+  const breath=c.createOscillator(), bg=c.createGain(); breath.frequency.value=0.09; bg.gain.value=0.01; breath.connect(bg); bg.connect(master.gain); breath.start();
+  musicNodes=[a[0],b[0],d[0],lfo,breath]; }
 function unlock(){ const c=ac(); if(!c)return; if(c.state==='suspended')c.resume();
   // iOS/mobile: kick the context awake with a 1-sample silent buffer (reliable unlock)
   if(!unlock._k){ try{ const b=c.createBufferSource(); b.buffer=c.createBuffer(1,1,22050); b.connect(c.destination); b.start(0); unlock._k=1; }catch(e){} }
   initAudioGraph(); if(!S.muted)startMusic(); }
-const sndPick =()=>beep(540,0.08,'triangle',0.16,760);
+const sndPick =()=>clack(1.18,0.26);   // light tac when you lift a tile
 const sndMatch=()=>{ [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'triangle',0.24),i*60)); };
 const sndErr  =()=>beep(170,0.18,'sawtooth',0.18,90);
 const sndWin  =()=>{ [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.22,'triangle',0.28),i*90)); };
 const sndOver =()=>{ beep(400,0.5,'sawtooth',0.3,80); setTimeout(()=>beep(200,0.45,'sawtooth',0.24,60),180); };
+// "clack" — like solid game pieces (tiles) tapping each other: a short noise
+// transient + a quick woody body. pitch ~0.8..1.3, vol ~0.2..0.4
+let _noiseBuf=null;
+function clack(pitch=1, vol=0.32){
+  if(S.muted) return; const c=ac(); if(!c) return; const now=c.currentTime, out=master||c.destination;
+  if(!_noiseBuf){ const n=Math.floor(c.sampleRate*0.08); _noiseBuf=c.createBuffer(1,n,c.sampleRate); const d=_noiseBuf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2.4); }
+  const src=c.createBufferSource(); src.buffer=_noiseBuf;
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1700*pitch; bp.Q.value=1.1;
+  const ng=c.createGain(); ng.gain.value=vol; src.connect(bp); bp.connect(ng); ng.connect(out); src.start(now);
+  const o=c.createOscillator(), og=c.createGain(); o.type='triangle';
+  o.frequency.setValueAtTime(440*pitch,now); o.frequency.exponentialRampToValueAtTime(150*pitch,now+0.05);
+  og.gain.setValueAtTime(vol*0.6,now); og.gain.exponentialRampToValueAtTime(0.0001,now+0.07);
+  o.connect(og); og.connect(out); o.start(now); o.stop(now+0.09);
+}
 // haptics
 function buzz(p){ if(navigator.vibrate){ try{ navigator.vibrate(p); }catch(e){} } }
 
@@ -433,7 +450,7 @@ function pickTile(t){
 }
 
 // called when a flying tile actually settles into its tray slot
-function onTileLanded(t){ checkTray(); }
+function onTileLanded(t){ clack(0.85+Math.random()*0.25, 0.36); checkTray(); }   // solid "clack" landing in the tray
 function landedCount(){ return S.trayArr.filter(t=>t.state==='tray').length; }
 function checkTray(){
   if(S.busy) return;
@@ -561,7 +578,7 @@ function animate(){
         t.vy-=GRAVITY*dt; g.position.y+=t.vy*dt;
         if(g.position.y<=t.home.y){ g.position.y=t.home.y; const imp=Math.min(1,-t.vy/12);
           if(-t.vy>2.4 && (t.bounces|0)<1){ t.bounces=(t.bounces|0)+1; t.vy=-t.vy*0.34; t.squash=Math.max(t.squash,imp*0.7); }
-          else { t.vy=0; t.state='board'; t.squash=Math.max(t.squash,imp); if(imp>0.3){ shake(imp*0.35); buzz(Math.round(imp*16)); spawnDust(g.position,imp); } }
+          else { t.vy=0; t.state='board'; t.squash=Math.max(t.squash,imp); if(imp>0.25){ shake(imp*0.35); buzz(Math.round(imp*16)); spawnDust(g.position,imp); clack(0.7+Math.random()*0.35, 0.1+imp*0.14); } }
         }
         // stretch while falling fast, then squash on land
         const stretch=t.vy<0?Math.min(0.18,-t.vy*0.012):0; g.scale.set((1-stretch*0.5)*(1+0.22*t.squash),(1+stretch)*(1-0.34*t.squash),(1-stretch*0.5)*(1+0.22*t.squash));
