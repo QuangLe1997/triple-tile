@@ -311,15 +311,14 @@ const iconCache={};
 function iconTexture(type){ if(iconCache[type])return iconCache[type];
   const s=256, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
   g.clearRect(0,0,s,s);
-  // bright soft disc behind the icon → it stands out clearly on ANY tile colour or material
-  const r=s*0.42, rg=g.createRadialGradient(s/2,s*0.46,r*0.15,s/2,s/2,r);
-  rg.addColorStop(0,'rgba(255,255,255,0.98)'); rg.addColorStop(0.72,'rgba(255,255,255,0.95)'); rg.addColorStop(0.92,'rgba(255,255,255,0.7)'); rg.addColorStop(1,'rgba(255,255,255,0)');
-  g.fillStyle=rg; g.beginPath(); g.arc(s/2,s/2,r,0,6.28); g.fill();
-  // big emoji with a soft drop shadow for depth
-  g.font='700 '+Math.round(s*0.6)+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  // BIG emoji, no white plate — keep the tile colour visible. A crisp dark halo
+  // (drawn as a few offset shadow passes) makes the icon pop on any colour/material.
   g.textAlign='center'; g.textBaseline='middle';
-  g.shadowColor='rgba(0,0,0,0.32)'; g.shadowBlur=s*0.045; g.shadowOffsetY=s*0.022;
-  g.fillText(SYMBOLS[type%SYMBOLS.length], s/2, s/2+s*0.03);
+  g.font='700 '+Math.round(s*0.72)+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  const sym=SYMBOLS[type%SYMBOLS.length], cx=s/2, cy=s/2+s*0.02;
+  g.shadowColor='rgba(0,0,0,0.55)'; g.shadowBlur=s*0.07;
+  for(let i=0;i<3;i++) g.fillText(sym, cx, cy);   // stack passes → stronger, even outline glow
+  g.shadowColor='transparent'; g.fillText(sym, cx, cy);
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=8; iconCache[type]=tex; return tex; }
 
 // ---------------- tile factory ----------------
