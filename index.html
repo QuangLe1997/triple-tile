@@ -34,8 +34,8 @@
   .chip .v{font-size:22px;font-weight:800;line-height:1.15;text-shadow:0 2px 6px rgba(0,0,0,.5);}
   .chip.score .v{color:var(--mint);} .chip.best .v{color:var(--gold);} .chip.level .v{color:var(--rose);}
 
-  #tools{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(16px,calc(env(safe-area-inset-bottom) + 12px));
-    z-index:11;display:flex;flex-direction:column;gap:11px;}
+  #tools{position:fixed;right:max(10px,env(safe-area-inset-right));top:max(70px,calc(env(safe-area-inset-top) + 66px));
+    z-index:11;display:flex;flex-direction:column;gap:12px;}
   .tool{width:52px;height:52px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:1px;color:var(--ink);transition:transform .12s;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));}
   .tool:active{transform:scale(.88);}
@@ -182,7 +182,10 @@ function startMusic(){ const c=ac(); if(!c||musicNodes.length||S.muted)return; i
   a[1].disconnect(); b[1].disconnect(); d[1].disconnect(); a[1].connect(filt); b[1].connect(filt); d[1].connect(filt); filt.connect(master);
   const lfo=c.createOscillator(), lg=c.createGain(); lfo.frequency.value=0.08; lg.gain.value=140; lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
   musicNodes=[a[0],b[0],d[0],lfo]; }
-function unlock(){ const c=ac(); if(!c)return; if(c.state==='suspended')c.resume(); initAudioGraph(); if(!S.muted)startMusic(); }
+function unlock(){ const c=ac(); if(!c)return; if(c.state==='suspended')c.resume();
+  // iOS/mobile: kick the context awake with a 1-sample silent buffer (reliable unlock)
+  if(!unlock._k){ try{ const b=c.createBufferSource(); b.buffer=c.createBuffer(1,1,22050); b.connect(c.destination); b.start(0); unlock._k=1; }catch(e){} }
+  initAudioGraph(); if(!S.muted)startMusic(); }
 const sndPick =()=>beep(540,0.08,'triangle',0.16,760);
 const sndMatch=()=>{ [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'triangle',0.24),i*60)); };
 const sndErr  =()=>beep(170,0.18,'sawtooth',0.18,90);
@@ -203,9 +206,17 @@ const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) }
 
 // vibrant nebula backdrop (matches the key-art banner: navy + colour glows + sparkles)
 (function(){ const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-  // simple, calm gradient — clean & easy to read the tiles against
-  let grd=g.createLinearGradient(0,0,0,s); grd.addColorStop(0,'#4a5590'); grd.addColorStop(1,'#333c68');
-  g.fillStyle=grd; g.fillRect(0,0,s,s);
+  // deep infinite-space black — simple & premium; candy tiles pop on it
+  let rg=g.createRadialGradient(s*0.5,s*0.4,s*0.05,s*0.5,s*0.55,s*0.8);
+  rg.addColorStop(0,'#0e0e1c'); rg.addColorStop(0.6,'#06060f'); rg.addColorStop(1,'#010104');
+  g.fillStyle=rg; g.fillRect(0,0,s,s);
+  // very faint nebula clouds
+  const glow=(x,y,r,col,al)=>{ const q=g.createRadialGradient(x,y,0,x,y,r); q.addColorStop(0,col); q.addColorStop(1,'rgba(0,0,0,0)'); g.globalAlpha=al; g.fillStyle=q; g.fillRect(0,0,s,s); g.globalAlpha=1; };
+  glow(s*0.22,s*0.24,s*0.5,'#3a2a72',0.22); glow(s*0.82,s*0.72,s*0.5,'#16345e',0.2);
+  // stars
+  for(let i=0;i<150;i++){ const r=Math.random()*1.4+0.2; g.globalAlpha=Math.random()*0.6+0.15; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,r,0,6.28); g.fill(); }
+  for(let i=0;i<8;i++){ g.globalAlpha=0.9; g.fillStyle='#cfe2ff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.4+1.2,0,6.28); g.fill(); }
+  g.globalAlpha=1;
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
 // soft studio environment → clean glossy candy reflections (premium, not glary)
 scene.environment=(function(){ const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const g=cv.getContext('2d');
@@ -225,7 +236,7 @@ key.shadow.bias=-0.0004; key.shadow.normalBias=0.02; key.shadow.radius=3;
 const fill=new THREE.DirectionalLight(0xffffff,0.5); fill.position.set(-5,4,-2); scene.add(fill);
 
 // soft floor receives the cast shadows (grounds the pile clearly on the bright bg)
-const floorMat=new THREE.MeshStandardMaterial({color:0x3a4590,metalness:0.0,roughness:0.95});
+const floorMat=new THREE.MeshStandardMaterial({color:0x0e0e1e,metalness:0.0,roughness:0.95});
 const floor=new THREE.Mesh(new THREE.CircleGeometry(26,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; floor.receiveShadow=true; scene.add(floor);
 
 // ambient floaty motes
@@ -355,7 +366,7 @@ function fitContent(){
   const pts=[]; for(const x of[layout.cMinX,layout.cMaxX]) for(const z of[layout.cMinZ,layout.cMaxZ]) for(const y of[layout.cMinY,layout.cMaxY]) pts.push(new THREE.Vector3(x,y,z));
   // FILL: solve the distance so the content reaches the safe margins (no big empty
   // borders). Extra top margin keeps the pile clear of the HUD chips.
-  const mx=0.955, myTop=0.90, myBot=0.985, tmp=new THREE.Vector3(); let d=12;
+  const mx=(a<0.72?1.02:0.96), myTop=0.92, myBot=0.99, tmp=new THREE.Vector3(); let d=12;
   for(let it=0;it<6;it++){ camera.position.copy(C).addScaledVector(dir,d); camera.lookAt(C);
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
     let m=0.0001; for(const p of pts){ tmp.copy(p).project(camera); m=Math.max(m, Math.abs(tmp.x)/mx, (tmp.y>0?tmp.y/myTop:-tmp.y/myBot)); }
@@ -604,7 +615,7 @@ function animate(){
 // ---------------- boot ----------------
 loadBest(); drawMute(); resize(); refreshHUD(); animate();
 document.getElementById('loading').classList.add('hidden');
-['pointerdown','touchend','keydown'].forEach(ev=>window.addEventListener(ev,unlock,{once:true}));
+['pointerdown','pointerup','touchstart','touchend','click','keydown'].forEach(ev=>window.addEventListener(ev,unlock,{passive:true}));
 </script>
 </body>
 </html>
