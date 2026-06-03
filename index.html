@@ -52,6 +52,10 @@
     background:linear-gradient(100deg,var(--mint),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 2px 18px rgba(231,192,106,.6));}
   #flash{position:fixed;inset:0;background:radial-gradient(circle,rgba(231,192,106,.35),transparent 70%);opacity:0;pointer-events:none;z-index:8;}
+  #toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-12px);z-index:13;pointer-events:none;opacity:0;transition:opacity .3s,transform .3s;
+    background:var(--panel);border:1px solid rgba(84,214,178,.5);border-radius:14px;padding:8px 16px;font-size:15px;font-weight:700;
+    color:var(--cream);backdrop-filter:blur(8px);box-shadow:0 8px 24px rgba(0,0,0,.5);white-space:nowrap;}
+  #toast.show{opacity:1;transform:translate(-50%,0);}
   #levelBanner{position:fixed;left:50%;top:34%;transform:translate(-50%,-50%) scale(.8);z-index:14;pointer-events:none;text-align:center;
     opacity:0;transition:opacity .5s cubic-bezier(.2,.9,.3,1),transform .6s cubic-bezier(.2,.9,.3,1);width:90%;max-width:560px;}
   #levelBanner.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
@@ -102,6 +106,20 @@
     background:linear-gradient(100deg,rgba(84,214,178,.95),rgba(231,192,106,.95));border:0;color:#08110d;font-weight:800;
     box-shadow:0 16px 44px -10px rgba(84,214,178,.7),0 6px 22px rgba(0,0,0,.5);animation:playPulse 2.4s ease-in-out infinite;}
   .btn-play:hover{filter:brightness(1.07);transform:translateY(-2px);}
+  .metaLine{font-size:13px;letter-spacing:2px;color:var(--gold);font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.8);margin-bottom:-4px;}
+  .menu-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  .menu-row .btn{font-size:14px;padding:12px 20px;}
+  .stars{display:flex;gap:10px;justify-content:center;font-size:clamp(30px,8vw,46px);line-height:1;margin:2px 0;}
+  .stars span{color:rgba(255,255,255,.18);transition:color .2s,transform .2s;}
+  .stars span.on{color:var(--gold);filter:drop-shadow(0 2px 12px rgba(231,192,106,.7));}
+  #collGrid{display:flex;flex-direction:column;gap:14px;max-width:min(460px,92vw);max-height:62vh;overflow-y:auto;padding:6px 4px;}
+  .coll-theme{}
+  .coll-head{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin:0 0 7px 2px;}
+  .coll-cells{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;}
+  .coll-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:26px;border-radius:13px;
+    background:rgba(255,255,255,.05);border:1px solid var(--line);}
+  .coll-cell.locked{color:rgba(255,255,255,.22);filter:grayscale(1);}
+  .coll-cell.got{background:linear-gradient(150deg,rgba(84,214,178,.18),rgba(231,192,106,.14));border-color:rgba(84,214,178,.4);}
   @keyframes playPulse{0%,100%{box-shadow:0 16px 44px -10px rgba(84,214,178,.6),0 6px 22px rgba(0,0,0,.5);}
     50%{box-shadow:0 20px 60px -8px rgba(84,214,178,.95),0 6px 22px rgba(0,0,0,.5);}}
   #loading{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:var(--bg);
@@ -129,16 +147,23 @@
 <div id="combo"></div>
 <div id="flash"></div>
 <div id="levelBanner"><div class="lb-tag" id="lbTag">LEVEL 1</div><div class="lb-name" id="lbName">WILD SAVANNA</div><div class="lb-story" id="lbStory"></div></div>
+<div id="toast"></div>
 
 <div class="overlay" id="menu">
   <div class="menu-dock">
     <div class="help">Tap the glowing 3D tiles into the tray · line up <b>3 of a kind</b> to clear them.</div>
+    <div class="metaLine" id="metaLine">⭐ <span id="menuStars">0</span> stars</div>
     <div class="btn btn-play" id="startBtn">PLAY ▶</div>
+    <div class="menu-row">
+      <div class="btn" id="newGameBtn" style="display:none">NEW GAME ↻</div>
+      <div class="btn" id="collectBtn">📖 <span id="collN">0</span>/<span id="collTot">32</span></div>
+    </div>
   </div>
 </div>
 
 <div class="overlay hidden" id="result">
   <div class="title" id="resTitle" style="font-size:clamp(34px,9vw,64px)">LEVEL CLEAR</div>
+  <div id="resStars" class="stars" style="display:none"><span>★</span><span>★</span><span>★</span></div>
   <div id="resSub" class="sub" style="display:none"></div>
   <div id="newbestLine" class="newbest" style="display:none">★ NEW BEST ★</div>
   <div class="panel">
@@ -148,6 +173,13 @@
     </div>
     <div class="btn btn-primary" id="resBtn">CONTINUE ▶</div>
   </div>
+</div>
+
+<div class="overlay hidden" id="collection">
+  <div class="title" style="font-size:clamp(26px,7vw,44px)">COLLECTION</div>
+  <div class="sub" id="collSub">0 / 32 animals discovered</div>
+  <div id="collGrid"></div>
+  <div class="btn btn-primary" id="collClose" style="margin-top:8px">CLOSE</div>
 </div>
 
 <div id="loading">LOADING…</div>
@@ -196,10 +228,27 @@ function applyTheme(t){ S.theme=t; FACES=PAL[t.pal]||PAL.candy; SYMBOLS=SYM[t.sy
 const S = {
   tiles:[], trayArr:[], score:0, best:0, level:1, undo:3, shuffle:3,
   history:[], started:false, over:false, won:false, muted:false, busy:false,
-  phase:'menu', introT:0,
+  phase:'menu', introT:0, usedHelp:false, maxTray:0,
 };
 function loadBest(){ try{ S.best=+localStorage.getItem('tt3d_best')||0; }catch(e){} }
 function saveBest(){ try{ localStorage.setItem('tt3d_best',S.best); }catch(e){} }
+
+// ---------------- meta: progress / stars / collection ----------------
+const ALL_ANIMALS=[...SYM.savanna,...SYM.ocean,...SYM.forest,...SYM.sky];   // 32 to collect
+const META={ savedLevel:1, stars:{}, collected:{} };
+function loadMeta(){ try{
+  META.savedLevel=Math.max(1,+localStorage.getItem('tt3d_level')||1);
+  META.stars=JSON.parse(localStorage.getItem('tt3d_stars')||'{}')||{};
+  META.collected=JSON.parse(localStorage.getItem('tt3d_coll')||'{}')||{};
+}catch(e){ META.stars={}; META.collected={}; } }
+function saveMeta(){ try{
+  localStorage.setItem('tt3d_level',META.savedLevel);
+  localStorage.setItem('tt3d_stars',JSON.stringify(META.stars));
+  localStorage.setItem('tt3d_coll',JSON.stringify(META.collected));
+}catch(e){} }
+function totalStars(){ let n=0; for(const k in META.stars) n+=META.stars[k]; return n; }
+function collectedCount(){ let n=0; for(const a of ALL_ANIMALS) if(META.collected[a]) n++; return n; }
+function collectAnimal(sym){ if(META.collected[sym]) return false; META.collected[sym]=1; saveMeta(); return true; }
 
 // ---------------- audio ----------------
 let _ac=null;
@@ -267,8 +316,8 @@ function buildBackground(style){
     g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.7,s*0.22,s*0.52,'#ffcf6a',0.4); glow(s*0.28,s*0.85,s*0.42,'#b5793a',0.24); stars(40,'#ffe6b0'); }
   else if(style==='ocean'){ const rg=g.createLinearGradient(0,0,0,s); rg.addColorStop(0,'#0c4a6a'); rg.addColorStop(0.6,'#063048'); rg.addColorStop(1,'#021018');
     g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.5,-s*0.05,s*0.75,'#3ad8ff',0.32); glow(s*0.82,s*0.7,s*0.45,'#1aa6c0',0.22); stars(80,'#bfeeff'); }
-  else if(style==='crystal'){ const rg=g.createRadialGradient(s*0.5,s*0.4,s*0.05,s*0.5,s*0.55,s*0.85); rg.addColorStop(0,'#16214c'); rg.addColorStop(1,'#05060f');
-    g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.25,s*0.3,s*0.55,'#2a5ad0',0.28); glow(s*0.78,s*0.7,s*0.5,'#1aa6d0',0.22); stars(120,'#cfe6ff'); }
+  else if(style==='crystal'){ const rg=g.createRadialGradient(s*0.5,s*0.4,s*0.05,s*0.5,s*0.55,s*0.85); rg.addColorStop(0,'#243a7a'); rg.addColorStop(1,'#0a1024');
+    g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.25,s*0.3,s*0.6,'#3a6ae0',0.34); glow(s*0.78,s*0.7,s*0.55,'#2ac0e8',0.28); stars(120,'#dcebff'); }
   else if(style==='forge'){ const rg=g.createLinearGradient(0,0,0,s); rg.addColorStop(0,'#1c1611'); rg.addColorStop(1,'#0a0705');
     g.fillStyle=rg; g.fillRect(0,0,s,s); glow(s*0.5,s*1.02,s*0.75,'#ff6a1a',0.42); glow(s*0.2,s*0.86,s*0.42,'#ff9a3a',0.26); glow(s*0.82,s*0.9,s*0.4,'#ff7a20',0.22); stars(50,'#ffceab'); }
   else if(style==='nebula'){ g.fillStyle='#000000'; g.fillRect(0,0,s,s); glow(s*0.2,s*0.25,s*0.6,'#7a3aff',0.32); glow(s*0.82,s*0.3,s*0.52,'#2fd8e0',0.26); glow(s*0.5,s*0.88,s*0.62,'#ff4fd0',0.24); stars(170,'#ffffff'); }
@@ -334,10 +383,15 @@ function tileMaterial(f){
     envMapIntensity:0.7,emissive:f.b,emissiveIntensity:0.05});   // varnished carved wood
   if(MATSTYLE==='metal') return new THREE.MeshPhysicalMaterial({color:f.b,metalness:1.0,roughness:0.28,
     clearcoat:0.6,clearcoatRoughness:0.2,envMapIntensity:1.6,emissive:f.b,emissiveIntensity:0.03});   // polished steel
-  if(MATSTYLE==='glass') return new THREE.MeshPhysicalMaterial({color:f.b,metalness:0,roughness:0.05,
-    transmission:0.92,thickness:0.9,ior:1.45,transparent:true,clearcoat:1.0,clearcoatRoughness:0.05,
-    iridescence:0.55,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],specularIntensity:1.0,
-    envMapIntensity:1.7,emissive:f.b,emissiveIntensity:0.07});   // transparent crystal glass
+  if(MATSTYLE==='glass'){
+    if(_lowGpu) return new THREE.MeshPhysicalMaterial({color:f.b,metalness:0,roughness:0.12,transparent:true,opacity:0.78,
+      clearcoat:1.0,clearcoatRoughness:0.05,iridescence:0.5,iridescenceIOR:1.4,specularIntensity:1.0,
+      envMapIntensity:1.7,emissive:f.b,emissiveIntensity:0.22});   // CHEAP glass (no transmission) for weak GPUs — bright & translucent
+    return new THREE.MeshPhysicalMaterial({color:f.b,metalness:0,roughness:0.05,
+      transmission:0.9,thickness:0.8,ior:1.45,transparent:true,clearcoat:1.0,clearcoatRoughness:0.05,
+      iridescence:0.55,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],specularIntensity:1.0,
+      envMapIntensity:1.8,emissive:f.b,emissiveIntensity:0.16});   // transparent crystal glass (brighter so it doesn't go dark)
+  }
   return new THREE.MeshPhysicalMaterial({color:f.b,roughness:0.18,metalness:0.15,
     clearcoat:1.0,clearcoatRoughness:0.03,sheen:0.8,sheenRoughness:0.25,sheenColor:new THREE.Color(0xffffff),
     iridescence:0.7,iridescenceIOR:1.4,iridescenceThicknessRange:[120,480],
@@ -503,9 +557,13 @@ function buildTrayDock(){
 function buildTrayFrames(){ buildTrayDock(); }
 
 // ---------------- gameplay ----------------
-function startGame(){ S.score=0; S.level=1; S.undo=3; S.shuffle=3; S.started=true; S.over=false; S.won=false;
+function startGame(fromLevel){ const lv=Math.max(1,fromLevel||1);
+  S.score=0; S.level=lv; S.undo=3; S.shuffle=3; S.started=true; S.over=false; S.won=false; S.usedHelp=false; S.maxTray=0;
+  META.savedLevel=lv; saveMeta();
   _lastTheme=null; generate(S.level); buildTrayFrames(); refreshHUD(); hide('menu'); hide('result'); unlock(); beginIntro(); showLevelBanner(S.level); }
-function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min(5,S.shuffle+1);
+function continueGame(){ startGame(META.savedLevel); }
+function nextLevel(){ S.level++; S.undo=Math.min(5,S.undo+1); S.shuffle=Math.min(5,S.shuffle+1); S.usedHelp=false; S.maxTray=0;
+  META.savedLevel=S.level; saveMeta();
   generate(S.level); buildTrayFrames(); refreshHUD(); hide('result'); dropTiles(); S.phase='play';
   resize();   // re-sync renderer + camera fit to the CURRENT visible viewport (URL bar may have changed during the result overlay)
   showLevelBanner(S.level); }
@@ -522,6 +580,7 @@ function pickTile(t){
   if(!isFree(t)){ sndErr(); buzz(22); bump(t); return; }
   if(S.trayArr.length>=SLOTS) return;
   t.taken=true; t.slot=S.trayArr.length; t.home.copy(trayPos(t.slot)); S.trayArr.push(t); t.state='fly'; t.vy=7.2; t.pop=0.5;
+  S.maxTray=Math.max(S.maxTray,S.trayArr.length);   // track closest approach to a fail → fewer stars
   S.history.push(t.id); sndPick(); buzz(9);
 }
 
@@ -549,6 +608,7 @@ function clearTriple(){
   for(const t of removing){ t.state='pop'; t.t=0; t.popTo=ctr.clone(); burst(t.grp.position,t.type); }
   shockwave(ctr,ec); sparkleBurst(ctr,ec);
   S.score+=30; sndMatch(); buzz([0,18,45,30]); showCombo('MATCH!'); flash(0.5); shake(0.8);
+  const sym=SYMBOLS[mt%SYMBOLS.length]; if(collectAnimal(sym)) showToast('New! '+sym+' added to collection');   // META: discover animal
   reindexTray(); refreshHUD();
   if(!S.tiles.some(x=>!x.taken&&!x.gone) && S.trayArr.length===0){ S.won=true; winLevel(); return; }
   setTimeout(()=>checkTray(), 60);   // chain combos after tiles resettle
@@ -557,7 +617,9 @@ function clearTriple(){
 function reindexTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i]; t.slot=i; t.home.copy(trayPos(i));
   if(t.state==='tray'){ t.state='fly'; t.vy=2.6; } } }
 
+function levelStars(){ let s=3; if(S.usedHelp) s--; if(S.maxTray>=SLOTS-1) s--; return Math.max(1,s); }   // 3=clean, -1 used a booster, -1 nearly failed
 function winLevel(){ S.score+=100+S.level*20; if(S.score>S.best){ S.best=S.score; saveBest(); }
+  const st=levelStars(); S.lastStars=st; if(st>(META.stars[S.level]||0)){ META.stars[S.level]=st; } saveMeta();
   refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti();
   setTimeout(()=>showResult(true),600);          // congrats banner...
   setTimeout(()=>{ if(S.won) nextLevel(); },2400); }   // ...then auto-advance to the next level
@@ -566,8 +628,8 @@ function gameOver(){ if(S.over) return; S.over=true; if(S.score>S.best){ S.best=
 
 function doUndo(){ if(S.over||S.phase!=='play'||S.undo<=0||S.history.length===0) return;
   const id=S.history.pop(); const idx=S.trayArr.findIndex(t=>t.id===id); if(idx<0)return;
-  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.vy=6; S.undo--; sndPick(); reindexTray(); refreshHUD(); }
-function doShuffle(){ if(S.over||S.phase!=='play'||S.shuffle<=0) return;
+  const t=S.trayArr.splice(idx,1)[0]; t.taken=false; t.state='return'; t.vy=6; S.undo--; S.usedHelp=true; sndPick(); reindexTray(); refreshHUD(); }
+function doShuffle(){ if(S.over||S.phase!=='play'||S.shuffle<=0) return; S.usedHelp=true;
   const live=S.tiles.filter(t=>!t.taken&&!t.gone); const types=shuffleArr(live.map(t=>t.type));
   live.forEach((t,i)=>{ t.type=types[i]; const f=FACES[t.type%FACES.length]; t.grp.userData.mat.color.setHex(f.b);
     t.grp.userData.icon.material.map=iconTexture(t.type); t.grp.userData.icon.material.needsUpdate=true; t.pop=0.7; });
@@ -637,15 +699,38 @@ function showLevelBanner(level){ const t=themeForLevel(level), el=document.getEl
   _lbT=setTimeout(()=>{ el.classList.remove('show'); }, isNew?2600:1700); }
 function hide(id){ const el=document.getElementById(id); el.classList.add('hidden'); clearTimeout(el._ht); el._ht=setTimeout(()=>{ el.style.display='none'; },420); }
 function show(id){ const el=document.getElementById(id); clearTimeout(el._ht); el.style.display=''; void el.offsetWidth; el.classList.remove('hidden'); }
+function showToast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2000); }
 function showResult(win){ document.getElementById('resTitle').textContent=win?'LEVEL CLEAR':'GAME OVER';
   document.getElementById('res-score').textContent=S.score; document.getElementById('res-best').textContent=S.best;
   document.getElementById('newbestLine').style.display=(S.score>=S.best&&S.score>0)?'':'none';
+  // stars earned this level (win only)
+  const starsEl=document.getElementById('resStars'); starsEl.style.display=win?'flex':'none';
+  if(win){ const got=S.lastStars||1; const sp=starsEl.querySelectorAll('span'); sp.forEach((s,i)=>{ s.classList.toggle('on',i<got);
+    s.style.transitionDelay=(i*0.12)+'s'; }); }
   const sub=document.getElementById('resSub'); sub.style.display=win?'':'none'; if(win) sub.textContent='🎉 Level '+(S.level+1)+' coming up…';
   document.getElementById('resBtn').style.display=win?'none':'';   // win → auto-advance (no button); lose → PLAY AGAIN
   document.getElementById('resBtn').textContent='PLAY AGAIN ↻'; show('result'); }
 
-document.getElementById('startBtn').addEventListener('click',startGame);
-document.getElementById('resBtn').addEventListener('click',()=>{ if(S.won)nextLevel(); else startGame(); });
+// ---------------- menu + collection UI ----------------
+function refreshMenu(){ const hasSave=META.savedLevel>1; const sb=document.getElementById('startBtn'), ng=document.getElementById('newGameBtn');
+  if(hasSave){ sb.textContent='CONTINUE · LV '+META.savedLevel+' ▶'; sb.onclick=continueGame; ng.style.display=''; ng.onclick=()=>startGame(1); }
+  else { sb.textContent='PLAY ▶'; sb.onclick=()=>startGame(1); ng.style.display='none'; }
+  document.getElementById('menuStars').textContent=totalStars();
+  document.getElementById('metaLine').style.display=totalStars()>0?'':'none';
+  document.getElementById('collN').textContent=collectedCount(); document.getElementById('collTot').textContent=ALL_ANIMALS.length; }
+function buildCollection(){ const grid=document.getElementById('collGrid'); grid.innerHTML='';
+  const groups=[['SAVANNA',SYM.savanna],['CORAL REEF',SYM.ocean],['CRYSTAL ZOO',SYM.forest],['IRON AVIARY',SYM.sky]];
+  for(const [name,arr] of groups){ const sec=document.createElement('div'); sec.className='coll-theme';
+    const h=document.createElement('div'); h.className='coll-head'; h.textContent=name; sec.appendChild(h);
+    const cells=document.createElement('div'); cells.className='coll-cells';
+    for(const sym of arr){ const c=document.createElement('div'); const got=!!META.collected[sym];
+      c.className='coll-cell '+(got?'got':'locked'); c.textContent=got?sym:'❓'; cells.appendChild(c); }
+    sec.appendChild(cells); grid.appendChild(sec); }
+  document.getElementById('collSub').textContent=collectedCount()+' / '+ALL_ANIMALS.length+' animals discovered'; }
+document.getElementById('resBtn').addEventListener('click',()=>{ if(S.won)nextLevel(); else startGame(S.level); });
+document.getElementById('collectBtn').addEventListener('click',()=>{ buildCollection(); show('collection'); });
+document.getElementById('collClose').addEventListener('click',()=>hide('collection'));
 document.getElementById('undoBtn').addEventListener('click',doUndo);
 document.getElementById('shuffleBtn').addEventListener('click',doShuffle);
 const muteBtn=document.getElementById('muteBtn');
@@ -662,7 +747,7 @@ let W=1,H=1;
 // always matches what's actually on screen instead of the full device dimensions.
 function viewSize(){ const vv=window.visualViewport;
   return { w:Math.max(1,Math.round(vv?vv.width:window.innerWidth)), h:Math.max(1,Math.round(vv?vv.height:window.innerHeight)) }; }
-function resize(){ const v=viewSize(); W=v.w; H=v.h; const dpr=Math.min(2,window.devicePixelRatio||1);
+function resize(){ const v=viewSize(); W=v.w; H=v.h; const dpr=Math.min(_lowGpu?1.5:2,window.devicePixelRatio||1);
   renderer.setPixelRatio(dpr); renderer.setSize(W,H,true);   // updateStyle → canvas CSS = exact visible viewport
   camera.aspect=W/H; camera.updateProjectionMatrix();
   computeBounds(); fitContent(); }
@@ -672,6 +757,7 @@ if(window.visualViewport){ window.visualViewport.addEventListener('resize',resiz
 
 // ---------------- main loop ----------------
 const clock=new THREE.Clock();
+let _fpsAcc=0,_fpsN=0,_lowFps=0,_downgraded=false;   // perf guard
 function ease(a,b,k){ return a+(b-a)*k; }
 function animate(){
   const dt=Math.min(0.05,clock.getDelta()); const tnow=clock.elapsedTime;
@@ -739,11 +825,15 @@ function animate(){
   }
   updateParts(dt); updateShock(dt);
   renderer.render(scene,camera);
+  // perf guard: if FPS stays under 40 for ~4s, drop cast shadows once to recover
+  if(!_downgraded){ _fpsAcc+=dt; _fpsN++;
+    if(_fpsAcc>=2){ const fps=_fpsN/_fpsAcc; _fpsAcc=0; _fpsN=0;
+      if(fps<40){ if(++_lowFps>=2){ _downgraded=true; renderer.shadowMap.enabled=false; key.castShadow=false; renderer.shadowMap.needsUpdate=true; } } else _lowFps=0; } }
   requestAnimationFrame(animate);
 }
 
 // ---------------- boot ----------------
-loadBest(); drawMute(); resize(); refreshHUD(); animate();
+loadBest(); loadMeta(); refreshMenu(); drawMute(); resize(); refreshHUD(); animate();
 document.getElementById('loading').classList.add('hidden');
 ['pointerdown','pointerup','touchstart','touchend','click','keydown'].forEach(ev=>window.addEventListener(ev,unlock,{passive:true}));
 </script>
