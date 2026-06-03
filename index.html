@@ -130,6 +130,7 @@
 
 <div class="overlay hidden" id="result">
   <div class="title" id="resTitle" style="font-size:clamp(34px,9vw,64px)">LEVEL CLEAR</div>
+  <div id="resSub" class="sub" style="display:none"></div>
   <div id="newbestLine" class="newbest" style="display:none">★ NEW BEST ★</div>
   <div class="panel">
     <div class="gostats">
@@ -486,7 +487,9 @@ function reindexTray(){ for(let i=0;i<S.trayArr.length;i++){ const t=S.trayArr[i
   if(t.state==='tray'){ t.state='fly'; t.vy=2.6; } } }
 
 function winLevel(){ S.score+=100+S.level*20; if(S.score>S.best){ S.best=S.score; saveBest(); }
-  refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti(); setTimeout(()=>showResult(true),700); }
+  refreshHUD(); sndWin(); buzz([0,40,60,40,60,80]); confetti();
+  setTimeout(()=>showResult(true),600);          // congrats banner...
+  setTimeout(()=>{ if(S.won) nextLevel(); },2400); }   // ...then auto-advance to the next level
 function gameOver(){ if(S.over) return; S.over=true; if(S.score>S.best){ S.best=S.score; saveBest(); }
   refreshHUD(); sndOver(); buzz([0,80,40,120]); shake(1.2); setTimeout(()=>showResult(false),450); }
 
@@ -558,7 +561,9 @@ function show(id){ const el=document.getElementById(id); clearTimeout(el._ht); e
 function showResult(win){ document.getElementById('resTitle').textContent=win?'LEVEL CLEAR':'GAME OVER';
   document.getElementById('res-score').textContent=S.score; document.getElementById('res-best').textContent=S.best;
   document.getElementById('newbestLine').style.display=(S.score>=S.best&&S.score>0)?'':'none';
-  document.getElementById('resBtn').textContent=win?'CONTINUE ▶':'PLAY AGAIN ↻'; show('result'); }
+  const sub=document.getElementById('resSub'); sub.style.display=win?'':'none'; if(win) sub.textContent='🎉 Level '+(S.level+1)+' coming up…';
+  document.getElementById('resBtn').style.display=win?'none':'';   // win → auto-advance (no button); lose → PLAY AGAIN
+  document.getElementById('resBtn').textContent='PLAY AGAIN ↻'; show('result'); }
 
 document.getElementById('startBtn').addEventListener('click',startGame);
 document.getElementById('resBtn').addEventListener('click',()=>{ if(S.won)nextLevel(); else startGame(); });
