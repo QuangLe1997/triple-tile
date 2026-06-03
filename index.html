@@ -206,16 +206,13 @@ const camTarget={ pos:new THREE.Vector3(0,9,12), look:new THREE.Vector3(0,0,1) }
 
 // vibrant nebula backdrop (matches the key-art banner: navy + colour glows + sparkles)
 (function(){ const s=512, cv=document.createElement('canvas'); cv.width=cv.height=s; const g=cv.getContext('2d');
-  // deep infinite-space black — simple & premium; candy tiles pop on it
-  let rg=g.createRadialGradient(s*0.5,s*0.4,s*0.05,s*0.5,s*0.55,s*0.8);
-  rg.addColorStop(0,'#0e0e1c'); rg.addColorStop(0.6,'#06060f'); rg.addColorStop(1,'#010104');
+  // pure deep-space BLACK (no colour tint) + scattered stars
+  g.fillStyle='#000000'; g.fillRect(0,0,s,s);
+  let rg=g.createRadialGradient(s*0.5,s*0.45,s*0.05,s*0.5,s*0.5,s*0.8);
+  rg.addColorStop(0,'#0a0a0c'); rg.addColorStop(1,'#000000');
   g.fillStyle=rg; g.fillRect(0,0,s,s);
-  // very faint nebula clouds
-  const glow=(x,y,r,col,al)=>{ const q=g.createRadialGradient(x,y,0,x,y,r); q.addColorStop(0,col); q.addColorStop(1,'rgba(0,0,0,0)'); g.globalAlpha=al; g.fillStyle=q; g.fillRect(0,0,s,s); g.globalAlpha=1; };
-  glow(s*0.22,s*0.24,s*0.5,'#3a2a72',0.22); glow(s*0.82,s*0.72,s*0.5,'#16345e',0.2);
-  // stars
-  for(let i=0;i<150;i++){ const r=Math.random()*1.4+0.2; g.globalAlpha=Math.random()*0.6+0.15; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,r,0,6.28); g.fill(); }
-  for(let i=0;i<8;i++){ g.globalAlpha=0.9; g.fillStyle='#cfe2ff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.4+1.2,0,6.28); g.fill(); }
+  for(let i=0;i<160;i++){ const r=Math.random()*1.4+0.2; g.globalAlpha=Math.random()*0.65+0.15; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,r,0,6.28); g.fill(); }
+  for(let i=0;i<8;i++){ g.globalAlpha=0.95; g.fillStyle='#ffffff'; g.beginPath(); g.arc(Math.random()*s,Math.random()*s,Math.random()*1.4+1.2,0,6.28); g.fill(); }
   g.globalAlpha=1;
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; scene.background=tex; })();
 // soft studio environment → clean glossy candy reflections (premium, not glary)
@@ -226,7 +223,7 @@ scene.environment=(function(){ const cv=document.createElement('canvas'); cv.wid
   const pm=new THREE.PMREMGenerator(renderer); const env=pm.fromEquirectangular(tex).texture; tex.dispose(); pm.dispose(); return env; })();
 
 // lights — neutral key + fill + ambient for TRUE, sharp albedo colors (no glow, no tint)
-const hemi=new THREE.HemisphereLight(0xdfe8ff,0x141a2c,0.55); scene.add(hemi);
+const hemi=new THREE.HemisphereLight(0xf2f2f5,0x0a0a0c,0.55); scene.add(hemi);
 const amb=new THREE.AmbientLight(0xffffff,0.35); scene.add(amb);
 const _lowGpu=(matchMedia&&matchMedia('(pointer:coarse)').matches)||Math.min(window.innerWidth,window.innerHeight)<620;
 const key=new THREE.DirectionalLight(0xffffff,1.9); key.position.set(3.5,11,5); key.castShadow=true; scene.add(key);
@@ -236,7 +233,7 @@ key.shadow.bias=-0.0004; key.shadow.normalBias=0.02; key.shadow.radius=3;
 const fill=new THREE.DirectionalLight(0xffffff,0.5); fill.position.set(-5,4,-2); scene.add(fill);
 
 // soft floor receives the cast shadows (grounds the pile clearly on the bright bg)
-const floorMat=new THREE.MeshStandardMaterial({color:0x0e0e1e,metalness:0.0,roughness:0.95});
+const floorMat=new THREE.MeshStandardMaterial({color:0x070709,metalness:0.0,roughness:0.96});
 const floor=new THREE.Mesh(new THREE.CircleGeometry(26,64),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.6; floor.receiveShadow=true; scene.add(floor);
 
 // ambient floaty motes
@@ -340,10 +337,11 @@ function computeBounds(){
   const pileW=maxX-minX;
   // fewer tray slots on phones (less clutter, bigger), more on desktop
   const a=camera.aspect; SLOTS = a<0.72 ? 5 : (a<1.25 ? 6 : 7);
-  // tray width = pile width (never wider) so the content matches the screen and fills it
-  layout.traySpan=Math.max(SLOTS*0.66,Math.min(8.0,pileW));
-  layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.84;
-  layout.trayZ=maxZ+1.9; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.18;  // clear GAP from the pile; tile rests in the trough
+  // BIG, easy-to-read tray: a comfortable minimum width (can be wider than the pile on phones)
+  const trayMin = a<0.72 ? SLOTS*1.05 : SLOTS*0.78;
+  layout.traySpan=Math.max(trayMin,Math.min(9.0,pileW*1.05));
+  layout.trayGap=layout.traySpan/SLOTS; layout.trayScale=layout.trayGap*0.9;   // tiles fill the slots more
+  layout.trayZ=maxZ+1.9; layout.dockTop=0.0; layout.trayY=TILE*0.36*layout.trayScale - 0.2;  // clear GAP from the pile; tile rests in the deeper trough
   buildTrayDock();
   for(let i=0;i<S.trayArr.length;i++) S.trayArr[i].home.copy(trayPos(i));
   // content bounds = pile ∪ FULL tray dock (incl. glow halo + stack height) → always fully on-screen
@@ -392,7 +390,7 @@ function buildTrayDock(){
   while(trayDock.children.length){ const c=trayDock.children[0]; trayDock.remove(c); }
   const n=SLOTS, gap=layout.trayGap||0.94, span=layout.traySpan||6.6, topY=layout.dockTop, z=layout.trayZ;
   const tileW=(layout.trayScale||0.82)*TILE;
-  const baseW=span+0.4, baseD=tileW+0.85, rimH=0.24, floorTop=topY-0.18;
+  const baseW=span+0.5, baseD=tileW+1.05, rimH=0.32, floorTop=topY-0.22;
   // recessed FLOOR of the trough (dark) — tiles rest down inside it
   const floor=new THREE.Mesh(new RoundedBoxGeometry(baseW,0.5,baseD,4,0.18),
     new THREE.MeshPhysicalMaterial({color:0x111a38,roughness:0.62,metalness:0,clearcoat:0.5,clearcoatRoughness:0.3,envMapIntensity:0.18,emissive:0x0a1430,emissiveIntensity:0.28}));
